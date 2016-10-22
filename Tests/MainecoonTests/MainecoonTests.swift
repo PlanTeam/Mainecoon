@@ -31,7 +31,22 @@ class MainecoonTests: XCTestCase {
         }
     }
     
-    func testExample() throws {
+    func testEntityProjections() throws {
+        let realGroup = try self.groupType.makeEntity(fromDocument: ["name": "bob"])
+        let realUser = try self.userType.makeEntity(fromDocument: ["username": "Bert", "group": realGroup.makeReference().bsonValue, "age": 123])
+        
+        try realUser.store()
+        
+        guard let user = try self.userType.findOne(matching: "_id" == realUser["_id"], projecting: ["username"]) else {
+            XCTFail()
+            return
+        }
+        
+        XCTAssertEqual(user["age"], .nothing)
+        XCTAssertEqual(user["username"], "Bert")
+    }
+    
+    func testEntityRelations() throws {
         XCTAssertNil(try? self.groupType.makeEntity(fromDocument: ["bob": true]))
         
         let realGroup = try self.groupType.makeEntity(fromDocument: ["name": "bob"])
@@ -52,7 +67,8 @@ class MainecoonTests: XCTestCase {
     
     static var allTests : [(String, (MainecoonTests) -> () throws -> Void)] {
         return [
-            ("testExample", testExample),
+            ("testEntityRelations", testEntityRelations),
+            ("testEntityProjections", testEntityProjections),
         ]
     }
 }

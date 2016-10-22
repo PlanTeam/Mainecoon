@@ -23,8 +23,12 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
         }
     }
     
-    public func validate(_ document: Document, allowExtraKeys: Bool = true) -> ValidationResult {
-        for field in fields {
+    public func validate(_ document: Document, ignoringFields ignoredFields: Projection? = nil, allowExtraKeys: Bool = true) -> ValidationResult {
+        fieldLoop: for field in fields {
+            if let ignoredFields = ignoredFields, ignoredFields.document.keys.contains(field.name) {
+                continue fieldLoop
+            }
+            
             let result = field.validate(against: document.makeBsonValue())
             
             guard case .valid = result else {
@@ -200,6 +204,13 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
         
         case optional(named: String, matching: FieldRequirement)
         case required(named: String, matching: FieldRequirement)
+        
+        var name: String {
+            switch self {
+            case .optional(let name, _): return name
+            case .required(let name, _): return name
+            }
+        }
         
         public func validate(against value: Value, inScope scope: String? = nil, allowExtraKeys: Bool = true) -> ValidationResult {
             let scope = scope ?? ""

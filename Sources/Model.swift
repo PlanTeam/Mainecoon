@@ -14,11 +14,8 @@ public enum MainecoonError: Error {
 
 public typealias StorageErrorHandler = (Error, Model)->()
 
-public protocol Model {
+public protocol ModelProtocol {
     var modelType: ModelType { get }
-    
-    init(_ document: Document, asType type: ModelType) throws
-    init(_ document: Document, asType type: ModelType, validatingDocument: Bool) throws
     subscript(key: String) -> Value { get set }
     subscript(reference ref: String) -> Model? { get set }
     func store() throws
@@ -26,9 +23,50 @@ public protocol Model {
     func makeReference() -> DBRef
 }
 
-public class BasicModel: Model {
+public protocol Model: ModelProtocol {
+    init(_ document: Document, asType type: ModelType) throws
+    init(_ document: Document, asType type: ModelType, validatingDocument: Bool) throws
+}
+
+public protocol PartialModel: ModelProtocol {
+    init(_ document: Document, asType type: ModelType, projectedBy: Projection) throws
+    init(_ document: Document, asType type: ModelType, projectedBy: Projection, validatingDocument: Bool) throws
+}
+
+public class BasicModel: Model, PartialModel {
+    internal enum State {
+        case partial, whole
+    }
+    
     public required init(_ document: Document, asType type: ModelType) throws {
         if case .invalid(let error) = type.schematics.validate(document) {
+            throw MainecoonError.invalidModelDocument(error: error)
+        }
+        
+        self.document = document
+        self.modelType = type
+    }
+    
+    public required init(_ document: Document, asType type: ModelType, validatingDocument: Bool) throws {
+        if validatingDocument, case .invalid(let error) = type.schematics.validate(document) {
+            throw MainecoonError.invalidModelDocument(error: error)
+        }
+        
+        self.document = document
+        self.modelType = type
+    }
+    
+    public required init(_ document: Document, asType type: ModelType, projectedBy projection: Projection) throws {
+        if case .invalid(let error) = type.schematics.validate(document, ignoringFields: projection) {
+            throw MainecoonError.invalidModelDocument(error: error)
+        }
+        
+        self.document = document
+        self.modelType = type
+    }
+    
+    public required init(_ document: Document, asType type: ModelType, projectedBy projection: Projection, validatingDocument: Bool) throws {
+        if validatingDocument, case .invalid(let error) = type.schematics.validate(document, ignoringFields: projection) {
             throw MainecoonError.invalidModelDocument(error: error)
         }
         
@@ -42,15 +80,6 @@ public class BasicModel: Model {
     
     public static var storageErrorHandler: StorageErrorHandler = { error, model in
         print("Error: \"\(error)\". In Model \(model)")
-    }
-    
-    public required init(_ document: Document, asType type: ModelType, validatingDocument: Bool) throws {
-        if validatingDocument, case .invalid(let error) = type.schematics.validate(document) {
-            throw MainecoonError.invalidModelDocument(error: error)
-        }
-        
-        self.document = document
-        self.modelType = type
     }
     
     public subscript(key: String) -> Value {
@@ -126,12 +155,14 @@ public class ModelType {
     public fileprivate(set) var schematics: Schema
     public fileprivate(set) var name: (singular: String, plural: String)
     public fileprivate(set) var modelType: Model.Type
+    public fileprivate(set) var partialModelType: PartialModel.Type
     
-    init(named name: (singular: String, plural: String), inCollection collection: MongoKitten.Collection, withSchematics schema: Schema, modelType: Model.Type) {
+    init(named name: (singular: String, plural: String), inCollection collection: MongoKitten.Collection, withSchematics schema: Schema, modelType: Model.Type, partialModelType: PartialModel.Type) {
         self.collection = collection
         self.schematics = schema
         self.name = name
         self.modelType = modelType
+        self.partialModelType = partialModelType
     }
     
     public init(bySingularName name: String) throws {
@@ -143,6 +174,7 @@ public class ModelType {
         self.name = type.name
         self.schematics = type.schematics
         self.modelType = type.modelType
+        self.partialModelType = type.partialModelType
     }
     
     public static func makeType(fromSingularName name: String) throws -> ModelType {
@@ -165,19 +197,33 @@ public class ModelType {
         return try modelType.init(document, asType: self)
     }
     
-    public func makeEntity(fromDocument document: Document) throws -> Model {
-        return try modelType.init(document, asType: self)
-    }
-    
     public func find(matching query: QueryProtocol) throws -> Cursor<Model> {
         return Cursor(base: try collection.find(matching: query)) {
             try? self.modelType.init($0, asType: self)
         }
     }
+    
+    public func findOne(matching query: QueryProtocol, projecting projection: Projection) throws -> PartialModel? {
+        guard let document = try collection.findOne(matching: query, projecting: projection) else {
+            return nil
+        }
+        
+        return try partialModelType.init(document, asType: self, projectedBy: projection)
+    }
+    
+    public func find(matching query: QueryProtocol, projecting projection: Projection) throws -> Cursor<PartialModel> {
+        return Cursor(base: try collection.find(matching: query, projecting: projection)) {
+            try? self.partialModelType.init($0, asType: self, projectedBy: projection)
+        }
+    }
+    
+    public func makeEntity(fromDocument document: Document) throws -> Model {
+        return try modelType.init(document, asType: self)
+    }
 }
 
-public func registerModel(named name: (singular: String, plural: String), withSchematics schematics: Schema, inDatabase db: Database, modelType: Model.Type = BasicModel.self) -> ModelType {
-    let modelType = ModelType(named: name, inCollection: db[name.plural], withSchematics: schematics, modelType: modelType)
+public func registerModel(named name: (singular: String, plural: String), withSchematics schematics: Schema, inDatabase db: Database, modelType: Model.Type = BasicModel.self, partialModelType: PartialModel.Type = BasicModel.self) -> ModelType {
+    let modelType = ModelType(named: name, inCollection: db[name.plural], withSchematics: schematics, modelType: modelType, partialModelType: partialModelType)
     models[name.singular] = modelType
     
     return modelType
