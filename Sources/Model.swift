@@ -38,6 +38,8 @@ public class BasicModel: Model, PartialModel {
         case partial, whole
     }
     
+    var state: State
+    
     public required init(_ document: Document, asType type: ModelType) throws {
         if case .invalid(let error) = type.schematics.validate(document) {
             throw MainecoonError.invalidModelDocument(error: error)
@@ -45,6 +47,7 @@ public class BasicModel: Model, PartialModel {
         
         self.document = document
         self.modelType = type
+        self.state = .whole
     }
     
     public required init(_ document: Document, asType type: ModelType, validatingDocument: Bool) throws {
@@ -54,6 +57,7 @@ public class BasicModel: Model, PartialModel {
         
         self.document = document
         self.modelType = type
+        self.state = .whole
     }
     
     public required init(_ document: Document, asType type: ModelType, projectedBy projection: Projection) throws {
@@ -63,6 +67,7 @@ public class BasicModel: Model, PartialModel {
         
         self.document = document
         self.modelType = type
+        self.state = .partial
     }
     
     public required init(_ document: Document, asType type: ModelType, projectedBy projection: Projection, validatingDocument: Bool) throws {
@@ -72,6 +77,7 @@ public class BasicModel: Model, PartialModel {
         
         self.document = document
         self.modelType = type
+        self.state = .partial
     }
 
     var document: Document
@@ -126,7 +132,13 @@ public class BasicModel: Model, PartialModel {
     }
     
     public func store() throws {
-        try modelType.collection.update(matching: "_id" == self["_id"], to: self.document, upserting: true, multiple: false)
+        switch state {
+        case .whole:
+            try modelType.collection.update(matching: "_id" == self["_id"], to: self.document, upserting: true, multiple: false)
+        case .partial:
+            try modelType.collection.update(matching: "_id" == self["_id"], to: ["$set": ~self.document], upserting: true, multiple: false)
+        }
+        
     }
     
     public func remove() throws {

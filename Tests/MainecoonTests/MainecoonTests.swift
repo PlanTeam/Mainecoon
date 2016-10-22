@@ -37,13 +37,24 @@ class MainecoonTests: XCTestCase {
         
         try realUser.store()
         
-        guard let user = try self.userType.findOne(matching: "_id" == realUser["_id"], projecting: ["username"]) else {
+        guard var user = try self.userType.findOne(matching: "_id" == realUser["_id"], projecting: ["username"]) else {
             XCTFail()
             return
         }
         
         XCTAssertEqual(user["age"], .nothing)
         XCTAssertEqual(user["username"], "Bert")
+        
+        user["username"] = "Henk"
+        try user.store()
+        
+        guard var user2 = try self.userType.findOne(matching: "_id" == realUser["_id"]) else {
+            XCTFail()
+            return
+        }
+        
+        XCTAssertEqual(user2["username"], "Henk")
+        XCTAssertEqual(user2["age"], 123)
     }
     
     func testEntityRelations() throws {
