@@ -14,16 +14,37 @@ public enum MainecoonError: Error {
 
 public typealias StorageErrorHandler = (Error, Model)->()
 
-public class Model {
+public protocol Model {
+    var modelType: ModelType { get }
+    
+    init(_ document: Document, asType type: ModelType) throws
+    init(_ document: Document, asType type: ModelType, validatingDocument: Bool) throws
+    subscript(key: String) -> Value { get set }
+    subscript(reference ref: String) -> Model? { get set }
+    func store() throws
+    func remove() throws
+    func makeReference() -> DBRef
+}
+
+public class BasicModel: Model {
+    public required init(_ document: Document, asType type: ModelType) throws {
+        if case .invalid(let error) = type.schematics.validate(document) {
+            throw MainecoonError.invalidModelDocument(error: error)
+        }
+        
+        self.document = document
+        self.modelType = type
+    }
+
     var document: Document
-    let modelType: ModelType
+    public let modelType: ModelType
     public var storeAutomatically = true
     
     public static var storageErrorHandler: StorageErrorHandler = { error, model in
         print("Error: \"\(error)\". In Model \(model)")
     }
     
-    public init(_ document: Document, asType type: ModelType, validatingDocument: Bool = true) throws {
+    public required init(_ document: Document, asType type: ModelType, validatingDocument: Bool) throws {
         if validatingDocument, case .invalid(let error) = type.schematics.validate(document) {
             throw MainecoonError.invalidModelDocument(error: error)
         }
@@ -60,7 +81,7 @@ public class Model {
                     return nil
                 }
                 
-                return try? Model(document, asType: type)
+                return try? type.modelType.init(document, asType: type)
             }
             
             return (try? type.findOne(matching: "_id" == self[ref])) ?? nil
@@ -91,7 +112,7 @@ public class Model {
         do {
             try self.store()
         } catch {
-            Model.storageErrorHandler(error, self)
+            BasicModel.storageErrorHandler(error, self)
         }
     }
     
@@ -104,11 +125,13 @@ public class ModelType {
     public fileprivate(set) var collection: MongoKitten.Collection
     public fileprivate(set) var schematics: Schema
     public fileprivate(set) var name: (singular: String, plural: String)
+    public fileprivate(set) var modelType: Model.Type
     
-    init(named name: (singular: String, plural: String), inCollection collection: MongoKitten.Collection, withSchematics schema: Schema) {
+    init(named name: (singular: String, plural: String), inCollection collection: MongoKitten.Collection, withSchematics schema: Schema, modelType: Model.Type) {
         self.collection = collection
         self.schematics = schema
         self.name = name
+        self.modelType = modelType
     }
     
     public init(bySingularName name: String) throws {
@@ -119,6 +142,7 @@ public class ModelType {
         self.collection = type.collection
         self.name = type.name
         self.schematics = type.schematics
+        self.modelType = type.modelType
     }
     
     public static func makeType(fromSingularName name: String) throws -> ModelType {
@@ -138,22 +162,22 @@ public class ModelType {
             return nil
         }
         
-        return try Model(document, asType: self)
+        return try modelType.init(document, asType: self)
     }
     
     public func makeEntity(fromDocument document: Document) throws -> Model {
-        return try Model(document, asType: self)
+        return try modelType.init(document, asType: self)
     }
     
     public func find(matching query: QueryProtocol) throws -> Cursor<Model> {
         return Cursor(base: try collection.find(matching: query)) {
-            try? Model($0, asType: self)
+            try? self.modelType.init($0, asType: self)
         }
     }
 }
 
-public func registerModel(named name: (singular: String, plural: String), withSchematics schematics: Schema, inDatabase db: Database) -> ModelType {
-    let modelType = ModelType(named: name, inCollection: db[name.plural], withSchematics: schematics)
+public func registerModel(named name: (singular: String, plural: String), withSchematics schematics: Schema, inDatabase db: Database, modelType: Model.Type = BasicModel.self) -> ModelType {
+    let modelType = ModelType(named: name, inCollection: db[name.plural], withSchematics: schematics, modelType: modelType)
     models[name.singular] = modelType
     
     return modelType
