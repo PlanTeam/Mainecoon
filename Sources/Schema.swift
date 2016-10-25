@@ -47,7 +47,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
     public enum SchemaMetadata: ValueConvertible {
         public indirect enum FieldRequirement: ValueConvertible {
             case string, number, date, anyObject, bool, nonEmptyString
-            case reference(model: ModelType)
+            case reference(model: Instance.Type)
             case object(matching: Schema)
             case enumeration([ValueConvertible])
             case array(of: FieldRequirement)
@@ -76,11 +76,15 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                 case (.reference(let type), _):
                     do {
                         if case .document(let referenceDocument) = value {
-                            guard let reference = DBRef(referenceDocument, inDatabase: type.collection.database) else {
-                                return .invalid(reason: "\(key) is a reference to a Model in \(type.collection). But the Document found at this key does not resolve to a usable DBRef.")
+                            guard let model = try? type.makeModel() else {
+                                return .invalid(reason: "\(key) is a reference to an Instance of \(type). But the Instance does not have a registered Model")
                             }
                             
-                            let notFoundReason = "\(key) is a reference to a Model in \(type.collection). But it can't be resolved to a Document."
+                            guard let reference = DBRef(referenceDocument, inDatabase: model.collection.database) else {
+                                return .invalid(reason: "\(key) is a reference to an Instance of \(type). But the Document found at this key does not resolve to a usable DBRef.")
+                            }
+                            
+                            let notFoundReason = "\(key) is a reference to an Instance of \(type). But it can't be resolved to a Document."
                             
                             do {
                                 guard try reference.resolve() != nil else {
@@ -92,7 +96,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                                 return .invalid(reason: notFoundReason)
                             }
                         } else {
-                            return try type.count(matching: "_id" == value) == 1 ? .valid : .invalid(reason: "\(key) is a reference to a Model in \(type.collection). But a matching model in this collection could not be found")
+                            return try type.count(matching: "_id" == value) == 1 ? .valid : .invalid(reason: "\(key) is a reference to an Instance of \(type). But a matching model in this collection could not be found")
                         }
                     } catch {
                         return .invalid(reason: "Database lookup error")
