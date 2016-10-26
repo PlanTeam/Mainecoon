@@ -8,24 +8,24 @@ class MainecoonTests: XCTestCase {
         
         try realUser.store()
         
-        guard let user = try User.findOne(matching: "_id" == realUser["_id"], projecting: ["username"]) else {
+        guard let user = try User.findOne(matching: "_id" == realUser.identifier, projecting: ["username"]) else {
             XCTFail()
             return
         }
         
-        XCTAssertEqual(user["age"], .nothing)
-        XCTAssertEqual(user["username"], "Bert")
+        XCTAssertEqual(user.getProperty("age"), .nothing)
+        XCTAssertEqual(user.username, "Bert")
         
-        user["username"] = "Henk"
+        user.setProperty("username", toValue: "Henk")
         try user.store()
         
-        guard let user2 = try User.findOne(matching: "_id" == realUser["_id"]) else {
+        guard let user2 = try User.findOne(matching: "_id" == realUser.identifier) else {
             XCTFail()
             return
         }
         
-        XCTAssertEqual(user2["username"], "Henk")
-        XCTAssertEqual(user2["age"], 123)
+        XCTAssertEqual(user2.username, "Henk")
+        XCTAssertEqual(user2.getProperty("age"), 123)
     }
     
     override func setUp() {
@@ -39,17 +39,17 @@ class MainecoonTests: XCTestCase {
         let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
         
         XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "age": false, "group": ~ObjectId()]) as User)
-        XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "age": false, "group": realGroup["_id"]]) as User)
+        XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "age": false, "group": realGroup.identifier]) as User)
         XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "group": ~ObjectId()]) as User)
         
-        let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup["_id"], "age": 123]) as User
+        let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.identifier, "age": 123]) as User
         
-        guard let group = realUser[reference: "group"] else {
+        guard let group = realUser.group else {
             XCTFail()
             return
         }
         
-        XCTAssertEqual(group["name"], "bob")
+        XCTAssertEqual(group.name, "bob")
     }
     
     static var allTests : [(String, (MainecoonTests) -> () throws -> Void)] {
@@ -75,10 +75,10 @@ let userModel = registerModel(named: ("user", "users"), withSchematics: [
 class Group: BasicInstance {
     var name: String {
         get {
-            return self["name"].string
+            return self.getProperty("name").string
         }
         set {
-            self["name"] = ~newValue
+            self.setProperty("name", toValue: ~newValue)
         }
     }
 }
@@ -86,19 +86,27 @@ class Group: BasicInstance {
 class User: BasicInstance {
     var username: String {
         get {
-            return self["username"].string
+            return self.getProperty("username").string
         }
         set {
-            self["username"] = ~newValue
+            self.setProperty("username", toValue: ~newValue)
         }
     }
     
     var group: Group? {
         get {
-            return self[reference: "group"] as? Group
+            do {
+                return try self.getReference("group") as? Group
+            } catch {
+                return nil
+            }
         }
         set {
-            self[reference: "group"] = newValue
+            guard let newValue = newValue else {
+                return
+            }
+            
+            self.setProperty("group", toReferenceOf: newValue)
         }
     }
 }

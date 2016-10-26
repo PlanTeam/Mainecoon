@@ -104,7 +104,7 @@ open class BasicInstance: Instance {
         return try type.findOne(matching: "_id" == self.document[ref])
     }
     
-    public func setProperty(_ key: String, toValue newValue: BasicInstance) {
+    public func setProperty(_ key: String, toReferenceOf newValue: BasicInstance) {
         document[key] = DBRef(referencing: newValue.identifier, inCollection: newValue.model.collection).bsonValue
     }
     
