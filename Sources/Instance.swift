@@ -15,8 +15,6 @@ public enum MainecoonError: Error {
 public typealias StorageErrorHandler = (Error, Instance)->()
 
 public protocol InstanceProtocol {
-    subscript(key: String) -> Value { get set }
-    subscript(reference ref: String) -> Instance? { get set }
     func store() throws
     func remove() throws
     func makeReference() -> DBRef
@@ -38,10 +36,10 @@ open class BasicInstance: Instance {
     
     var identifier: Value {
         get {
-            return self["_id"]
+            return self.document["_id"]
         }
         set {
-            self["_id"] = newValue
+            self.document["_id"] = newValue
         }
     }
     
@@ -74,69 +72,58 @@ open class BasicInstance: Instance {
         print("Error: \"\(error)\". In Instance \(instance)")
     }
     
-    public subscript(key: String) -> Value {
-        get {
-            return document[key]
-        }
-        set {
-            document[key] = newValue
-        }
+    public func getProperty(_ key: String) -> Value {
+        return document[key]
     }
     
-    public subscript(reference ref: String) -> Instance? {
-        get {
-            guard let typeRequirement = self.model.schematics.requirements.first(where: { name, requirement in
-                name == ref
-            }) else {
+    public func setProperty(_ key: String, toValue newValue: Value) {
+        document[key] = newValue
+    }
+    
+    public func getReference(_ ref: String) throws -> Instance? {
+        guard let typeRequirement = self.model.schematics.requirements.first(where: { name, requirement in
+            name == ref
+        }) else {
+            return nil
+        }
+        
+        guard case .reference(let type) = typeRequirement.requirement else {
+            return nil
+        }
+        
+        let value = document[ref]
+        
+        if case .document(let referenceDocument) = value {
+            guard let document = try DBRef(referenceDocument, inDatabase: self.model.collection.database)?.resolve() else {
                 return nil
             }
             
-            guard case .reference(let type) = typeRequirement.requirement else {
-                return nil
-            }
-            
-            let value = document[ref]
-            
-            if case .document(let referenceDocument) = value {
-                guard let d = try? DBRef(referenceDocument, inDatabase: self.model.collection.database)?.resolve(), let document = d else {
-                    return nil
-                }
-                
-                return try? type.init(document, validatingDocument: true)
-            }
-            
-            return (try? type.findOne(matching: "_id" == self[ref])) ?? nil
+            return try type.init(document, validatingDocument: true)
         }
-        set {
-            guard let newValue = newValue else {
-                self[ref] = .nothing
-                return
-            }
-            
-            guard let model = try? newValue.makeModel() else {
-                return
-            }
-            
-            self[ref] = DBRef(referencing: newValue["_id"], inCollection: model.collection).bsonValue
-        }
+        
+        return try type.findOne(matching: "_id" == self.document[ref])
+    }
+    
+    public func setProperty(_ key: String, toValue newValue: BasicInstance) {
+        document[key] = DBRef(referencing: newValue.identifier, inCollection: newValue.model.collection).bsonValue
     }
     
     public func store() throws {
-        if self["_id"] == .nothing || self["_id"] == .null {
-            self["_id"] = ~ObjectId()
+        if self.identifier == .nothing || self.identifier == .null {
+            self.identifier = ~ObjectId()
         }
         
         switch state {
         case .whole:
-            try model.collection.update(matching: "_id" == self["_id"], to: self.document, upserting: true, multiple: false)
+            try model.collection.update(matching: "_id" == self.identifier, to: self.document, upserting: true, multiple: false)
         case .partial:
-            try model.collection.update(matching: "_id" == self["_id"], to: ["$set": ~self.document], upserting: true, multiple: false)
+            try model.collection.update(matching: "_id" == self.identifier, to: ["$set": ~self.document], upserting: true, multiple: false)
         }
         
     }
     
     public func remove() throws {
-        try model.collection.remove(matching: "_id" == self["_id"], limitedTo: 1)
+        try model.collection.remove(matching: "_id" == self.identifier, limitedTo: 1)
     }
     
     deinit {
@@ -152,7 +139,7 @@ open class BasicInstance: Instance {
     }
     
     public func makeReference() -> DBRef {
-        return DBRef(referencing: self["_id"], inCollection: self.model.collection)
+        return DBRef(referencing: self.identifier, inCollection: self.model.collection)
     }
 }
 
