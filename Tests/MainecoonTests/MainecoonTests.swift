@@ -3,12 +3,12 @@ import XCTest
 
 class MainecoonTests: XCTestCase {
     func testEntityProjections() throws {
-        let realGroup = try Group(["name": "bob"])
-        let realUser = try User(["username": "Bert", "group": realGroup.makeReference().bsonValue, "age": 123])
+        let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
+        let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.makeReference().bsonValue, "age": 123]) as User
         
         try realUser.store()
         
-        guard var user = try User.findOne(matching: "_id" == realUser["_id"], projecting: ["username"]) else {
+        guard let user = try User.findOne(matching: "_id" == realUser["_id"], projecting: ["username"]) else {
             XCTFail()
             return
         }
@@ -19,7 +19,7 @@ class MainecoonTests: XCTestCase {
         user["username"] = "Henk"
         try user.store()
         
-        guard var user2 = try User.findOne(matching: "_id" == realUser["_id"]) else {
+        guard let user2 = try User.findOne(matching: "_id" == realUser["_id"]) else {
             XCTFail()
             return
         }
@@ -28,16 +28,21 @@ class MainecoonTests: XCTestCase {
         XCTAssertEqual(user2["age"], 123)
     }
     
+    override func setUp() {
+        _ = groupModel
+        _ = userModel
+    }
+    
     func testEntityRelations() throws {
-        XCTAssertNil(try? Group(["bob": true]))
+        XCTAssertNil(try? Group.make(fromDocument: ["bob": true]) as Group)
         
-        let realGroup = try Group(["name": "bob"])
+        let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
         
-        XCTAssertNil(try? User(["username": "Bert", "age": false, "group": ~ObjectId()]))
-        XCTAssertNil(try? User(["username": "Bert", "age": false, "group": realGroup["_id"]]))
-        XCTAssertNil(try? User(["username": "Bert", "group": ~ObjectId()]))
+        XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "age": false, "group": ~ObjectId()]) as User)
+        XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "age": false, "group": realGroup["_id"]]) as User)
+        XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "group": ~ObjectId()]) as User)
         
-        let realUser = try User(["username": "Bert", "group": realGroup["_id"], "age": 123])
+        let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup["_id"], "age": 123]) as User
         
         guard let group = realUser[reference: "group"] else {
             XCTFail()
@@ -57,29 +62,17 @@ class MainecoonTests: XCTestCase {
 
 let db = try! Server(hostname: "localhost")["mainecoontest"]
 
-let groupType = registerModel(named: ("group", "groups"), withSchematics: [
+let groupModel = registerModel(named: ("group", "groups"), withSchematics: [
     "name": (.string, true)
-    ], inDatabase: db)
+    ], inDatabase: db, instanceType: Group.self)
 
-let userType = registerModel(named: ("user", "users"), withSchematics: [
+let userModel = registerModel(named: ("user", "users"), withSchematics: [
     "username": (.nonEmptyString, true),
     "age": (.number, false),
     "group": (.reference(model: Group.self), true)
-    ], inDatabase: db)
+    ], inDatabase: db, instanceType: User.self)
 
 class Group: BasicInstance {
-    public init(_ document: Document) throws {
-        try super.init(document, asType: groupType)
-    }
-    
-    required init(_ document: Document, asType type: Model, validatingDocument validate: Bool) throws {
-        try super.init(document, asType: type, validatingDocument: validate)
-    }
-    
-    required init(_ document: Document, asType type: Model, projectedBy projection: Projection, validatingDocument validate: Bool) throws {
-        try super.init(document, asType: type, projectedBy: projection, validatingDocument: validate)
-    }
-    
     var name: String {
         get {
             return self["name"].string
@@ -91,18 +84,6 @@ class Group: BasicInstance {
 }
 
 class User: BasicInstance {
-    public init(_ document: Document) throws {
-        try super.init(document, asType: userType)
-    }
-    
-    required init(_ document: Document, asType type: Model, validatingDocument validate: Bool) throws {
-        try super.init(document, asType: type, validatingDocument: validate)
-    }
-    
-    required init(_ document: Document, asType type: Model, projectedBy projection: Projection, validatingDocument validate: Bool) throws {
-        try super.init(document, asType: type, projectedBy: projection, validatingDocument: validate)
-    }
-    
     var username: String {
         get {
             return self["username"].string

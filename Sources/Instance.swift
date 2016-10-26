@@ -5,7 +5,7 @@ import Foundation
     typealias RegularExpression = NSRegularExpression
 #endif
 
-fileprivate var instances = [(InstanceProtocol, Model)]()
+fileprivate var instances = [(InstanceProtocol.Type, Model)]()
 
 public enum MainecoonError: Error {
     case invalidInstanceType
@@ -15,7 +15,6 @@ public enum MainecoonError: Error {
 public typealias StorageErrorHandler = (Error, Instance)->()
 
 public protocol InstanceProtocol {
-    var model: Model { get }
     subscript(key: String) -> Value { get set }
     subscript(reference ref: String) -> Instance? { get set }
     func store() throws
@@ -24,11 +23,15 @@ public protocol InstanceProtocol {
 }
 
 public protocol Instance: InstanceProtocol {
-    init(_ document: Document, asType type: Model, validatingDocument validate: Bool) throws
-    init(_ document: Document, asType type: Model, projectedBy projection: Projection, validatingDocument validate: Bool) throws
+    init(_ document: Document, validatingDocument validate: Bool) throws
+    init(_ document: Document, projectedBy projection: Projection, validatingDocument validate: Bool) throws
 }
 
-public class BasicInstance: Instance {
+open class BasicInstance: Instance {
+    public static func makeType() -> BasicInstance.Type {
+        return BasicInstance.self
+    }
+
     internal enum State {
         case partial, whole
     }
@@ -42,29 +45,29 @@ public class BasicInstance: Instance {
         }
     }
     
-    public required init(_ document: Document, asType type: Model, validatingDocument: Bool = true) throws {
-        if validatingDocument, case .invalid(let error) = type.schematics.validate(document) {
+    public required init(_ document: Document, validatingDocument: Bool = true) throws {
+        self.document = document
+        self.state = .whole
+        self.model = try makeModel()
+        
+        if validatingDocument, case .invalid(let error) = self.model.schematics.validate(document) {
             throw MainecoonError.invalidInstanceDocument(error: error)
         }
-        
-        self.document = document
-        self.model = type
-        self.state = .whole
     }
     
-    public required init(_ document: Document, asType type: Model, projectedBy projection: Projection, validatingDocument: Bool = true) throws {
-        if validatingDocument, case .invalid(let error) = type.schematics.validate(document, ignoringFields: projection) {
+    public required init(_ document: Document, projectedBy projection: Projection, validatingDocument: Bool = true) throws {
+        self.document = document
+        self.state = .partial
+        self.model = try makeModel()
+        
+        if validatingDocument, case .invalid(let error) = self.model.schematics.validate(document, ignoringFields: projection) {
             throw MainecoonError.invalidInstanceDocument(error: error)
         }
-        
-        self.document = document
-        self.model = type
-        self.state = .partial
     }
-
+    
     var state: State
-    var document: Document
-    public let model: Model
+    public private(set) var document: Document
+    var model: Model! = nil
     public var storeAutomatically = true
     
     public static var storageErrorHandler: StorageErrorHandler = { error, instance in
@@ -99,11 +102,7 @@ public class BasicInstance: Instance {
                     return nil
                 }
                 
-                guard let model = try? type.makeModel() else {
-                    return nil
-                }
-                
-                return try? type.init(document, asType: model, validatingDocument: true)
+                return try? type.init(document, validatingDocument: true)
             }
             
             return (try? type.findOne(matching: "_id" == self[ref])) ?? nil
@@ -114,11 +113,19 @@ public class BasicInstance: Instance {
                 return
             }
             
-            self[ref] = DBRef(referencing: newValue["_id"], inCollection: newValue.model.collection).bsonValue
+            guard let model = try? newValue.makeModel() else {
+                return
+            }
+            
+            self[ref] = DBRef(referencing: newValue["_id"], inCollection: model.collection).bsonValue
         }
     }
     
     public func store() throws {
+        if self["_id"] == .nothing || self["_id"] == .null {
+            self["_id"] = ~ObjectId()
+        }
+        
         switch state {
         case .whole:
             try model.collection.update(matching: "_id" == self["_id"], to: self.document, upserting: true, multiple: false)
@@ -133,7 +140,7 @@ public class BasicInstance: Instance {
     }
     
     deinit {
-        guard storeAutomatically else {
+        guard storeAutomatically && self.model != nil else {
             return
         }
         
@@ -162,18 +169,21 @@ public final class Model {
         self.instanceType = instanceType
     }
     
-    public static func makeModel<T: InstanceProtocol>(typeOf instanceType: T.Type) throws -> Model {
-        guard let (_, type) = instances.first(where: { $0.0 is T }) else {
-            throw MainecoonError.invalidInstanceType
+    public static func makeModel<T: Instance>(typeOf instanceType: T.Type) throws -> Model {
+        for (type, model) in instances {
+            if type == instanceType {
+                return Model(named: model.name, inCollection: model.collection, withSchematics: model.schematics, instanceType: model.instanceType)
+            }
         }
         
-        return Model(named: type.name, inCollection: type.collection, withSchematics: type.schematics, instanceType: type.instanceType)
+        throw MainecoonError.invalidInstanceType
     }
 }
 
-public func registerModel(named name: (singular: String, plural: String), withSchematics schematics: Schema, inDatabase db: Database, instanceType: Instance.Type = BasicInstance.self) -> Model {
-    let modelType = Model(named: name, inCollection: db[name.plural], withSchematics: schematics, instanceType: instanceType)
-    instances.append((instanceType as! InstanceProtocol, modelType))
+@discardableResult
+public func registerModel<T: Instance>(named name: (singular: String, plural: String), withSchematics schematics: Schema, inDatabase db: Database, instanceType: T.Type) -> Model {
+    let modelType = Model(named: name, inCollection: db[name.plural], withSchematics: schematics, instanceType: T.self as Instance.Type)
+    instances.append((T.self as InstanceProtocol.Type, modelType))
     
     return modelType
 }
