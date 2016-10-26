@@ -20,12 +20,16 @@ public protocol InstanceProtocol {
     func makeReference() -> DBRef
 }
 
-public protocol Instance: InstanceProtocol {
+public protocol Instance: InstanceProtocol, ValueConvertible {
     init(_ document: Document, validatingDocument validate: Bool) throws
     init(_ document: Document, projectedBy projection: Projection, validatingDocument validate: Bool) throws
 }
 
 open class BasicInstance: Instance {
+    public func makeBsonValue() -> Value {
+        return ~self.document
+    }
+    
     public static func makeType() -> BasicInstance.Type {
         return BasicInstance.self
     }
@@ -108,6 +112,16 @@ open class BasicInstance: Instance {
         document[key] = DBRef(referencing: newValue.identifier, inCollection: newValue.model.collection).bsonValue
     }
     
+    public func getEmbeddedReference(_ key: String) -> EmbeddedInstance? {
+        return EmbeddedInstance(self.document[key].document, inDatabase: self.model.collection.database)
+    }
+    
+    public func setEmbeddedReference(_ key: String, toReferenceOf instance: Instance, withProjection projection: Projection) throws {
+        let embedded = try EmbeddedInstance(reference: instance.makeReference(), withProjection: projection, inDatabase: self.model.collection.database)
+        
+        self.document[key] = ~embedded
+    }
+    
     public func store() throws {
         if self.identifier == .nothing || self.identifier == .null {
             self.identifier = ~ObjectId()
@@ -156,6 +170,19 @@ public final class Model {
         self.instanceType = instanceType
     }
     
+    public convenience init(named name: String, plural: Bool = true) throws {
+        for (_, model) in instances {
+            let referenceName = plural ? model.name.plural : model.name.singular
+            
+            if referenceName == name {
+                self.init(named: model.name, inCollection: model.collection, withSchematics: model.schematics, instanceType: model.instanceType)
+                return
+            }
+        }
+        
+        throw MainecoonError.invalidInstanceType
+    }
+    
     public static func makeModel<T: Instance>(typeOf instanceType: T.Type) throws -> Model {
         for (type, model) in instances {
             if type == instanceType {
@@ -168,8 +195,13 @@ public final class Model {
 }
 
 @discardableResult
-public func registerModel<T: Instance>(named name: (singular: String, plural: String), withSchematics schematics: Schema, inDatabase db: Database, instanceType: T.Type) -> Model {
+public func registerModel<T: Instance>(named name: (singular: String, plural: String), withSchematics schematics: Schema, inDatabase db: Database, instanceType: T.Type) throws -> Model {
     let modelType = Model(named: name, inCollection: db[name.plural], withSchematics: schematics, instanceType: T.self as Instance.Type)
+    
+    try modelType.collection.modify(flags: [
+        "validator": schematics.makeBsonValue()
+        ])
+    
     instances.append((T.self as InstanceProtocol.Type, modelType))
     
     return modelType

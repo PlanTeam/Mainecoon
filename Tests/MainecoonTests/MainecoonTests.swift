@@ -2,6 +2,30 @@ import XCTest
 @testable import Mainecoon
 
 class MainecoonTests: XCTestCase {
+    func testEmbeddedDocuments() throws {
+        let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
+        let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.makeReference().bsonValue, "age": 123]) as User
+        
+        try realUser.setEmbeddedReference("embeddedgroup", toReferenceOf: realGroup, withProjection: ["name"])
+        
+        try realGroup.store()
+        try realUser.store()
+        
+        guard let reference = realUser.getEmbeddedReference("embeddedgroup") else {
+            XCTFail()
+            return
+        }
+        
+        XCTAssertEqual(reference.embeddedDocument["name"], "bob")
+        
+        guard let groupReference = try reference.resolveReference() as? Group else {
+            XCTFail()
+            return
+        }
+        
+        XCTAssertEqual(groupReference.name, "bob")
+    }
+    
     func testEntityProjections() throws {
         let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
         let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.makeReference().bsonValue, "age": 123]) as User
@@ -62,11 +86,11 @@ class MainecoonTests: XCTestCase {
 
 let db = try! Server(hostname: "localhost")["mainecoontest"]
 
-let groupModel = registerModel(named: ("group", "groups"), withSchematics: [
+let groupModel = try! registerModel(named: ("group", "groups"), withSchematics: [
     "name": (.string, true)
     ], inDatabase: db, instanceType: Group.self)
 
-let userModel = registerModel(named: ("user", "users"), withSchematics: [
+let userModel = try! registerModel(named: ("user", "users"), withSchematics: [
     "username": (.nonEmptyString, true),
     "age": (.number, false),
     "group": (.reference(model: Group.self), true)
