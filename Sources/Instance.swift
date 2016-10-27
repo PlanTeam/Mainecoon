@@ -125,7 +125,7 @@ open class BasicInstance: Instance {
         print("Error: \"\(error)\". In Instance \(instance)")
     }
     
-    /// Returns the Value for the given property
+    /// Returns the BSONDocument for the given property or `nil` when it's not of this type
     ///
     /// Accessing subproperties can be done by comma separating the key parts
     ///
@@ -134,30 +134,65 @@ open class BasicInstance: Instance {
         return BSONDocument(document[key] as? BSON.Document ?? [:])
     }
     
+    /// Returns the Foundation.Date for the given property or `nil` when it's not of this type
+    ///
+    /// Accessing subproperties can be done by comma separating the key parts
+    ///
+    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
     public func getProperty(forKey key: String...) -> Date? {
         return document[key] as? Date
     }
     
+    /// Returns the BSON.Value for the given property or `Value.nothing` when there is no data
+    ///
+    /// Accessing subproperties can be done by comma separating the key parts
+    ///
+    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
     public func getProperty(forKey key: String...) -> BSON.Value {
         return document[key]?.makeBsonValue() ?? Value.nothing
     }
     
+    /// Returns the Foundation.Data for the given property or `nil` when it's not of this type
+    ///
+    /// Accessing subproperties can be done by comma separating the key parts
+    ///
+    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
     public func getProperty(forKey key: String...) -> Data? {
         return document[key] as? Data
     }
     
+    /// Returns the ObjectId for the given property or `nil` when it's not of this type
+    ///
+    /// Accessing subproperties can be done by comma separating the key parts
+    ///
+    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
     public func getProperty(forKey key: String...) -> ObjectId? {
         return document[key] as? ObjectId
     }
     
+    /// Returns the Bool for the given property or `nil` when it's not of this type
+    ///
+    /// Accessing subproperties can be done by comma separating the key parts
+    ///
+    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
     public func getProperty(forKey key: String...) -> Bool? {
         return document[key] as? Bool
     }
     
+    /// Returns the Int for the given property or `nil` when it's not of this type
+    ///
+    /// Accessing subproperties can be done by comma separating the key parts
+    ///
+    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
     public func getProperty(forKey key: String...) -> Int? {
         return document[key]?.makeBsonValue().int
     }
     
+    /// Returns the String for the given property or `nil` when it's not of this type
+    ///
+    /// Accessing subproperties can be done by comma separating the key parts
+    ///
+    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
     public func getProperty(forKey key: String...) -> String? {
         return document[key] as? String
     }
