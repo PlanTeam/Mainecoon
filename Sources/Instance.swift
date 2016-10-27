@@ -48,6 +48,9 @@ public protocol Instance: InstanceProtocol, ValueConvertible {
     /// - parameter projection: The Projection to use when validating the BSONDocument. We can only validate the projected variables.
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
     init(_ document: BSONDocument, projectedBy projection: Projection, validatingDocument validate: Bool) throws
+    
+    /// Initializes a whole instance by looking up the id in the collection
+    init(fromIdentifier id: Value) throws
 }
 
 /// Any Model registered as a BasicInstance or subclassed from the Basic Instnce will have all base functionality and bloat taken care of.
@@ -58,11 +61,26 @@ public protocol Instance: InstanceProtocol, ValueConvertible {
 ///
 /// Subclasses of BasicInstance can be enhanced by adding getter and setter variables to interact with the object more naturally. No additional implementation is necessary but may improve developer productivity and experience
 open class BasicInstance: Instance {
+    /// Initializes a whole instance by looking up the id in the collection
+    public required init(fromIdentifier id: Value) throws {
+        self.document = [:]
+        self.state = .whole
+        self.model = try makeModel()
+        
+        let document = BSONDocument(try model.collection.findOne(matching: "_id" == id) ?? [:])
+        
+        if case .invalid(let error) = self.model.schematics.validate(document) {
+            throw MainecoonError.invalidInstanceDocument(error: error)
+        }
+        
+        self.document = document
+    }
+    
     /// Converts this Instance to a Value so that it can be embedded in a BSONDocument
     public func makeBsonValue() -> Value {
         return ~self.document
     }
-
+    
     /// Used to keep track of the state that this BasicInstance has been initialized with.
     /// Used to change the method of storagee
     internal enum State {
