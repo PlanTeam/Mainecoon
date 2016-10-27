@@ -6,17 +6,17 @@ class MainecoonTests: XCTestCase {
         let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
         let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.makeReference().bsonValue, "age": 123]) as User
         
-        try realUser.setEmbeddedReference("embeddedgroup", toReferenceOf: realGroup, withProjection: ["name"])
+        try realUser.setEmbeddedInstance(toReferenceOf: realGroup, withProjection: ["name"], forKey: "embeddedgroup")
         
         try realGroup.store()
         try realUser.store()
         
-        guard let reference = realUser.getEmbeddedReference("embeddedgroup") else {
+        guard let reference = realUser.getEmbeddedInstance(forKey: "embeddedgroup") else {
             XCTFail()
             return
         }
         
-        XCTAssertEqual(reference.embeddedDocument["name"], "bob")
+        XCTAssertEqual(reference.embeddedDocument["name"] as? String, "bob")
         
         guard let groupReference = try reference.resolveReference() as? Group else {
             XCTFail()
@@ -37,10 +37,10 @@ class MainecoonTests: XCTestCase {
             return
         }
         
-        XCTAssertEqual(user.getProperty("age"), .nothing)
+        XCTAssertNil(user.getProperty(forKey: "age") as String?)
         XCTAssertEqual(user.username, "Bert")
         
-        user.setProperty("username", toValue: "Henk")
+        user.setProperty(toValue: "Henk", forKey: "username")
         try user.store()
         
         guard let user2 = try User.findOne(matching: "_id" == realUser.identifier) else {
@@ -49,7 +49,7 @@ class MainecoonTests: XCTestCase {
         }
         
         XCTAssertEqual(user2.username, "Henk")
-        XCTAssertEqual(user2.getProperty("age"), 123)
+        XCTAssertEqual(user2.getProperty(forKey: "age") as Int?, 123)
     }
     
     override func setUp() {
@@ -99,10 +99,10 @@ let userModel = try! registerModel(named: ("user", "users"), withSchematics: [
 class Group: BasicInstance {
     var name: String {
         get {
-            return self.getProperty("name").string
+            return self.getProperty(forKey: "name").string
         }
         set {
-            self.setProperty("name", toValue: ~newValue)
+            self.setProperty(toValue: newValue, forKey: "name")
         }
     }
 }
@@ -110,17 +110,17 @@ class Group: BasicInstance {
 class User: BasicInstance {
     var username: String {
         get {
-            return self.getProperty("username").string
+            return self.getProperty(forKey: "username").string
         }
         set {
-            self.setProperty("username", toValue: ~newValue)
+            self.setProperty(toValue: newValue, forKey: "username")
         }
     }
     
     var group: Group? {
         get {
             do {
-                return try self.getReference("group") as? Group
+                return try self.getReference(forKey: "group") as? Group
             } catch {
                 return nil
             }
@@ -130,7 +130,7 @@ class User: BasicInstance {
                 return
             }
             
-            self.setProperty("group", toReferenceOf: newValue)
+            self.setReference(toReferenceOf: newValue, forKey: "group")
         }
     }
 }

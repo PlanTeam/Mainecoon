@@ -1,6 +1,8 @@
+import BSON
+
 public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
     public func makeBsonValue() -> Value {
-        return Document(array: fields.map { $0.makeBsonValue() }).makeBsonValue()
+        return BSONDocument(array: fields.map { $0.makeBsonValue() }).makeBsonValue()
     }
     
     let fields: [SchemaMetadata]
@@ -23,7 +25,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
         }
     }
     
-    public func validate(_ document: Document, ignoringFields ignoredFields: Projection? = nil, allowExtraKeys: Bool = true) -> ValidationResult {
+    public func validate(_ document: BSONDocument, ignoringFields ignoredFields: Projection? = nil, allowExtraKeys: Bool = true) -> ValidationResult {
         fieldLoop: for field in fields {
             if let ignoredFields = ignoredFields, ignoredFields.document.keys.contains(field.name) {
                 continue fieldLoop
@@ -183,18 +185,18 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                 case .reference(_):
                     return ["$type": "objectId"]
                 case .enumeration(let values):
-                    return ["$in": Document(array: values.map { $0.makeBsonValue() }).makeBsonValue()]
+                    return ["$in": BSON.Document(array: values.map { $0.makeBsonValue() }).makeBsonValue()]
                 case .array(let requirement):
                     return ["$not": ["$elemMatch": ["$not": requirement.makeBsonValue()]]]
                 case .any(let requirements):
                     return ["$or":
-                        Document(array: requirements.map{$0.makeBsonValue()}).makeBsonValue()
+                        BSON.Document(array: requirements.map{$0.makeBsonValue()}).makeBsonValue()
                     ]
                 case .exactly(let val):
                     return val
                 case .all(let requirements):
                     return ["$and":
-                        Document(array: requirements.map{$0.makeBsonValue()}).makeBsonValue()
+                        BSON.Document(array: requirements.map{$0.makeBsonValue()}).makeBsonValue()
                     ]
                 case .matchingRegex(let pattern, let options):
                     return .regularExpression(pattern: pattern, options: options)

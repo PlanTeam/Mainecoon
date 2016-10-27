@@ -1,7 +1,7 @@
 import MongoKitten
 
 extension Instance {
-    public static func make<T: Instance>(fromDocument document: Document) throws -> T {
+    public static func make<T: Instance>(fromDocument document: BSONDocument) throws -> T {
         return try T.init(document, validatingDocument: true)
     }
     
@@ -26,18 +26,18 @@ extension Instance {
             return nil
         }
         
-        return try Self.init(document, validatingDocument: true)
+        return try Self.init(BSONDocument(document), validatingDocument: true)
     }
     
     public static func find(matching query: QueryProtocol) throws -> Cursor<Self> {
         return Cursor(base: try makeCollection().find(matching: query)) {
-            try? Self.init($0, validatingDocument: true)
+            try? Self.init(BSONDocument($0), validatingDocument: true)
         }
     }
     
-    public static func find(matching query: Document? = nil) throws -> Cursor<Self> {
-        return Cursor(base: try makeCollection().find(matching: query)) {
-            try? Self.init($0, validatingDocument: true)
+    public static func find(matching query: BSONDocument? = nil) throws -> Cursor<Self> {
+        return Cursor(base: try makeCollection().find(matching: query?.rawDocument)) {
+            try? Self.init(BSONDocument($0), validatingDocument: true)
         }
     }
     
@@ -46,18 +46,18 @@ extension Instance {
             return nil
         }
         
-        return try Self.init(document, projectedBy: projection, validatingDocument: true)
+        return try Self.init(BSONDocument(document), projectedBy: projection, validatingDocument: true)
     }
     
     public static func find(matching query: QueryProtocol, projecting projection: Projection) throws -> Cursor<Self> {
         return Cursor(base: try makeCollection().find(matching: query, projecting: projection)) {
-            try? Self.init($0, projectedBy: projection, validatingDocument: true)
+            try? Self.init(BSONDocument($0), projectedBy: projection, validatingDocument: true)
         }
     }
     
-    public static func find(matching query: Document? = nil, projecting projection: Projection) throws -> Cursor<Self> {
-        return Cursor(base: try makeCollection().find(matching: query, projecting: projection)) {
-            try? Self.init($0, projectedBy: projection, validatingDocument: true)
+    public static func find(matching query: BSONDocument? = nil, projecting projection: Projection) throws -> Cursor<Self> {
+        return Cursor(base: try makeCollection().find(matching: query?.rawDocument, projecting: projection)) {
+            try? Self.init(BSONDocument($0), projectedBy: projection, validatingDocument: true)
         }
     }
 }
