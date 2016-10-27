@@ -33,19 +33,19 @@ public protocol InstanceProtocol {
     func makeReference() -> DBRef
 }
 
-/// Anything conforming to this protocol is an instance as well as convertible to a Value so that it can be embedded inside a Document
-/// Anything conforming to this protocol will additionally be initializable by means of a Document, (optionally) a Projection and a boolean indicating that the input Document should be validated
+/// Anything conforming to this protocol is an instance as well as convertible to a Value so that it can be embedded inside a BSONDocument
+/// Anything conforming to this protocol will additionally be initializable by means of a BSONDocument, (optionally) a Projection and a boolean indicating that the input BSONDocument should be validated
 public protocol Instance: InstanceProtocol, ValueConvertible {
     /// Initializes a whole instance
     ///
-    /// - parameter document: The Document to initialize this Instance with
+    /// - parameter document: The BSONDocument to initialize this Instance with
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
     init(_ document: BSONDocument, validatingDocument validate: Bool) throws
     
     /// Initializes a partial instance
     ///
-    /// - parameter document: The Document to initialize this Instance with
-    /// - parameter projection: The Projection to use when validating the Document. We can only validate the projected variables.
+    /// - parameter document: The BSONDocument to initialize this Instance with
+    /// - parameter projection: The Projection to use when validating the BSONDocument. We can only validate the projected variables.
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
     init(_ document: BSONDocument, projectedBy projection: Projection, validatingDocument validate: Bool) throws
 }
@@ -58,7 +58,7 @@ public protocol Instance: InstanceProtocol, ValueConvertible {
 ///
 /// Subclasses of BasicInstance can be enhanced by adding getter and setter variables to interact with the object more naturally. No additional implementation is necessary but may improve developer productivity and experience
 open class BasicInstance: Instance {
-    /// Converts this Instance to a Value so that it can be embedded in a Document
+    /// Converts this Instance to a Value so that it can be embedded in a BSONDocument
     public func makeBsonValue() -> Value {
         return ~self.document
     }
@@ -81,7 +81,7 @@ open class BasicInstance: Instance {
     
     /// Initializes a whole instance
     ///
-    /// - parameter document: The Document to initialize this Instance with
+    /// - parameter document: The BSONDocument to initialize this Instance with
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
     public required init(_ document: BSONDocument, validatingDocument: Bool = true) throws {
         self.document = document
@@ -95,8 +95,8 @@ open class BasicInstance: Instance {
     
     /// Initializes a partial instance
     ///
-    /// - parameter document: The Document to initialize this Instance with
-    /// - parameter projection: The Projection to use when validating the Document. We can only validate the projected variables.
+    /// - parameter document: The BSONDocument to initialize this Instance with
+    /// - parameter projection: The Projection to use when validating the BSONDocument. We can only validate the projected variables.
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
     public required init(_ document: BSONDocument, projectedBy projection: Projection, validatingDocument: Bool = true) throws {
         self.document = document
@@ -173,7 +173,7 @@ open class BasicInstance: Instance {
     
     /// Gets and resolves a reference for a key
     ///
-    /// The key parts are comma separated for accessing sublayers of the Document
+    /// The key parts are comma separated for accessing sublayers of the BSONDocument
     ///
     /// It's recommended to cast this Instance to the related InstanceType.
     ///
@@ -204,7 +204,7 @@ open class BasicInstance: Instance {
     
     /// Creates a reference to the provided instance at the position of the key
     ///
-    /// The key parts are comma separated for accessing sublayers of the Document
+    /// The key parts are comma separated for accessing sublayers of the BSONDocument
     ///
     /// I.E.: `user.setReference(toReferenceOf: userGroup, forKey: "subdocument", "group")`
     public func setReference(toReferenceOf newValue: BasicInstance, forKey key: String...) {
@@ -213,7 +213,7 @@ open class BasicInstance: Instance {
     
     /// Ges the EmbeddedInstance from the given key position. Will return `nil` if none is found
     ///
-    /// The key parts are comma separated for accessing sublayers of the Document
+    /// The key parts are comma separated for accessing sublayers of the BSONDocument
     ///
     /// I.E.: `user.getEmbeddedInstance(forKey key: "subdocument", "group")`
     public func getEmbeddedInstance(forKey key: String...) -> EmbeddedInstance? {
@@ -222,7 +222,7 @@ open class BasicInstance: Instance {
     
     /// Ges the EmbeddedInstance from the given key position. Will return `nil` if none is found
     ///
-    /// The key parts are comma separated for accessing sublayers of the Document
+    /// The key parts are comma separated for accessing sublayers of the BSONDocument
     ///
     /// I.E.: `user.getEmbeddedInstance(forKey key: "subdocument", "group")`
     public func setEmbeddedInstance(toReferenceOf instance: Instance, withProjection projection: Projection, forKey key: String...) throws {
@@ -315,7 +315,7 @@ public final class Model {
 
 /// Registeres a model under a provided name. The plural name will be used for the collection name. Names should be unique and might cause errors when they're not.
 ///
-/// The provided schematics - or `Schama` - will be used to validate the collection Documents and any input that's used to instantiate an Instance of this Model
+/// The provided schematics - or `Schama` - will be used to validate the collection BSONDocuments and any input that's used to instantiate an Instance of this Model
 ///
 /// The provded database will be where the collection of this Model resides.
 ///
