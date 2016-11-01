@@ -4,7 +4,7 @@ import XCTest
 class MainecoonTests: XCTestCase {
     func testEmbeddedDocuments() throws {
         let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
-        let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.makeReference().bsonValue, "age": 123]) as User
+        let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.makeReference(), "age": 123]) as User
         
         try realUser.setEmbeddedInstance(toReferenceOf: realGroup, withProjection: ["name"], forKey: "embeddedgroup")
         
@@ -28,7 +28,7 @@ class MainecoonTests: XCTestCase {
     
     func testEntityProjections() throws {
         let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
-        let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.makeReference().bsonValue, "age": 123]) as User
+        let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.makeReference(), "age": 123]) as User
         
         try realUser.store()
         
@@ -62,9 +62,9 @@ class MainecoonTests: XCTestCase {
         
         let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
         
-        XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "age": false, "group": ~ObjectId()]) as User)
+        XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "age": false, "group": ObjectId()]) as User)
         XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "age": false, "group": realGroup.identifier]) as User)
-        XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "group": ~ObjectId()]) as User)
+        XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "group": ObjectId()]) as User)
         
         let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.identifier, "age": 123]) as User
         

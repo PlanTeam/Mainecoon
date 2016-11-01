@@ -6,26 +6,26 @@ public struct EmbeddedInstance: ValueConvertible {
     public var reference: DBRef
     
     /// The projection used to 
-    public var projection: BSONDocument
+    public var projection: Document
     
     /// The collection that this referred Instance resides in
     public var collection: MongoKitten.Collection {
-        return db[self.reference.documentValue["$ref"].string]
+        return db[self.reference.documentValue["$ref"]?.string ?? ""]
     }
     
     /// The identifier that's being referred to
     public var referencedIdentifier: Value {
-        return self.reference.documentValue["$id"]
+        return self.reference.documentValue["$id"]?.makeBsonValue() ?? .nothing
     }
     
     /// The database that this reference resides in
     fileprivate let db: Database
     
-    /// The embedded BSONDocument that's a projection of the full one
-    fileprivate var embedded: BSONDocument? = nil
+    /// The embedded Document that's a projection of the full one
+    fileprivate var embedded: Document? = nil
     
-    /// The embedded BSONDocument that's a projection of the full one
-    public var embeddedDocument: BSONDocument {
+    /// The embedded Document that's a projection of the full one
+    public var embeddedDocument: Document {
         if let embedded = embedded {
             return embedded
         }
@@ -35,15 +35,15 @@ public struct EmbeddedInstance: ValueConvertible {
                 return [:]
             }
             
-            return BSONDocument(ref.makeBsonValue().document)
+            return ref.makeBsonValue().document as? Document ?? [:]
             
         } catch {
             return [:]
         }
     }
     
-    /// Initializes an EmbeddedInstance from a BSONDocument and the database this resides in
-    public init?(_ document: BSONDocument, inDatabase db: Database) {
+    /// Initializes an EmbeddedInstance from a Document and the database this resides in
+    public init?(_ document: Document, inDatabase db: Database) {
         guard let embedded = document["embedded"] as? BSON.Document, let reference = document["reference"] as? BSON.Document, let projection = document["projection"] as? BSON.Document else {
             return nil
         }
@@ -52,8 +52,8 @@ public struct EmbeddedInstance: ValueConvertible {
             return nil
         }
         
-        self.embedded = BSONDocument(embedded)
-        self.projection = BSONDocument(projection)
+        self.embedded = embedded
+        self.projection = projection
         self.db = db
         self.reference = ref
     }
@@ -61,16 +61,16 @@ public struct EmbeddedInstance: ValueConvertible {
     /// Initializes an EmbeddedInstance from a reference, projection and the database this resides in
     public init(reference: DBRef, withProjection projection: Projection, inDatabase db: Database) throws {
         self.reference = reference
-        self.projection = BSONDocument(projection.document)
+        self.projection = projection.document
         self.db = db
     }
     
     /// Returns the Document Value representation of this EmbeddedInstance
     public func makeBsonValue() -> Value {
         return [
-            "embedded": ~self.embeddedDocument,
-            "reference": self.reference.bsonValue,
-            "projection": ~self.projection
+            "embedded": self.embeddedDocument,
+            "reference": self.reference,
+            "projection": self.projection
         ]
     }
     
@@ -83,6 +83,6 @@ public struct EmbeddedInstance: ValueConvertible {
         }
         
         let type = try Model(named: collection.name).instanceType
-        return try? type.init(BSONDocument(document), validatingDocument: true)
+        return try? type.init(document, validatingDocument: true)
     }
 }

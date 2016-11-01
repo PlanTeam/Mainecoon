@@ -33,21 +33,21 @@ public protocol InstanceProtocol {
     func makeReference() -> DBRef
 }
 
-/// Anything conforming to this protocol is an instance as well as convertible to a Value so that it can be embedded inside a BSONDocument
-/// Anything conforming to this protocol will additionally be initializable by means of a BSONDocument, (optionally) a Projection and a boolean indicating that the input BSONDocument should be validated
+/// Anything conforming to this protocol is an instance as well as convertible to a Value so that it can be embedded inside a Document
+/// Anything conforming to this protocol will additionally be initializable by means of a Document, (optionally) a Projection and a boolean indicating that the input Document should be validated
 public protocol Instance: InstanceProtocol, ValueConvertible {
     /// Initializes a whole instance
     ///
-    /// - parameter document: The BSONDocument to initialize this Instance with
+    /// - parameter document: The Document to initialize this Instance with
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
-    init(_ document: BSONDocument, validatingDocument validate: Bool) throws
+    init(_ document: Document, validatingDocument validate: Bool) throws
     
     /// Initializes a partial instance
     ///
-    /// - parameter document: The BSONDocument to initialize this Instance with
-    /// - parameter projection: The Projection to use when validating the BSONDocument. We can only validate the projected variables.
+    /// - parameter document: The Document to initialize this Instance with
+    /// - parameter projection: The Projection to use when validating the Document. We can only validate the projected variables.
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
-    init(_ document: BSONDocument, projectedBy projection: Projection, validatingDocument validate: Bool) throws
+    init(_ document: Document, projectedBy projection: Projection, validatingDocument validate: Bool) throws
     
     /// Initializes a whole instance by looking up the id in the collection
     init(fromIdentifier id: Value) throws
@@ -67,7 +67,7 @@ open class BasicInstance: Instance {
         self.state = .whole
         self.model = try makeModel()
         
-        let document = BSONDocument(try model.collection.findOne(matching: "_id" == id) ?? [:])
+        let document = try model.collection.findOne(matching: "_id" == id) ?? [:]
         
         if case .invalid(let error) = self.model.schematics.validate(document) {
             throw MainecoonError.invalidInstanceDocument(error: error)
@@ -76,9 +76,9 @@ open class BasicInstance: Instance {
         self.document = document
     }
     
-    /// Converts this Instance to a Value so that it can be embedded in a BSONDocument
+    /// Converts this Instance to a Value so that it can be embedded in a Document
     public func makeBsonValue() -> Value {
-        return ~self.document
+        return self.document.makeBsonValue()
     }
     
     /// Used to keep track of the state that this BasicInstance has been initialized with.
@@ -99,9 +99,9 @@ open class BasicInstance: Instance {
     
     /// Initializes a whole instance
     ///
-    /// - parameter document: The BSONDocument to initialize this Instance with
+    /// - parameter document: The Document to initialize this Instance with
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
-    public required init(_ document: BSONDocument, validatingDocument: Bool = true) throws {
+    public required init(_ document: Document, validatingDocument: Bool = true) throws {
         self.document = document
         self.state = .whole
         self.model = try makeModel()
@@ -113,10 +113,10 @@ open class BasicInstance: Instance {
     
     /// Initializes a partial instance
     ///
-    /// - parameter document: The BSONDocument to initialize this Instance with
-    /// - parameter projection: The Projection to use when validating the BSONDocument. We can only validate the projected variables.
+    /// - parameter document: The Document to initialize this Instance with
+    /// - parameter projection: The Projection to use when validating the Document. We can only validate the projected variables.
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
-    public required init(_ document: BSONDocument, projectedBy projection: Projection, validatingDocument: Bool = true) throws {
+    public required init(_ document: Document, projectedBy projection: Projection, validatingDocument: Bool = true) throws {
         self.document = document
         self.state = .partial
         self.model = try makeModel()
@@ -130,7 +130,7 @@ open class BasicInstance: Instance {
     var state: State
     
     /// The underlying Document type that we use for keeping track of references, Embedded Instances and normal boring variables
-    public private(set) var document: BSONDocument
+    public private(set) var document: Document
     
     /// The Model that's bound to this Instance. Needs to be set by registering this Instance to a Schema, name etc.
     var model: Model! = nil
@@ -143,13 +143,13 @@ open class BasicInstance: Instance {
         print("Error: \"\(error)\". In Instance \(instance)")
     }
     
-    /// Returns the BSONDocument for the given property or `nil` when it's not of this type
+    /// Returns the Document for the given property or `nil` when it's not of this type
     ///
     /// Accessing subproperties can be done by comma separating the key parts
     ///
     /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
-    public func getProperty(forKey key: String...) -> BSONDocument? {
-        return BSONDocument(document[key] as? BSON.Document ?? [:])
+    public func getProperty(forKey key: String...) -> Document? {
+        return document[key] as? Document ?? [:]
     }
     
     /// Returns the Foundation.Date for the given property or `nil` when it's not of this type
@@ -226,7 +226,7 @@ open class BasicInstance: Instance {
     
     /// Gets and resolves a reference for a key
     ///
-    /// The key parts are comma separated for accessing sublayers of the BSONDocument
+    /// The key parts are comma separated for accessing sublayers of the Document
     ///
     /// It's recommended to cast this Instance to the related InstanceType.
     ///
@@ -249,7 +249,7 @@ open class BasicInstance: Instance {
                 return nil
             }
             
-            return try type.init(BSONDocument(document), validatingDocument: true)
+            return try type.init(document, validatingDocument: true)
         }
         
         return try type.findOne(matching: "_id" == self.document[ref]?.makeBsonValue() ?? Value.nothing)
@@ -257,31 +257,31 @@ open class BasicInstance: Instance {
     
     /// Creates a reference to the provided instance at the position of the key
     ///
-    /// The key parts are comma separated for accessing sublayers of the BSONDocument
+    /// The key parts are comma separated for accessing sublayers of the Document
     ///
     /// I.E.: `user.setReference(toReferenceOf: userGroup, forKey: "subdocument", "group")`
     public func setReference(toReferenceOf newValue: BasicInstance, forKey key: String...) {
-        document[key] = DBRef(referencing: newValue.identifier.makeBsonValue(), inCollection: newValue.model.collection).bsonValue
+        document[key] = DBRef(referencing: newValue.identifier, inCollection: newValue.model.collection)
     }
     
     /// Ges the EmbeddedInstance from the given key position. Will return `nil` if none is found
     ///
-    /// The key parts are comma separated for accessing sublayers of the BSONDocument
+    /// The key parts are comma separated for accessing sublayers of the Document
     ///
     /// I.E.: `user.getEmbeddedInstance(forKey key: "subdocument", "group")`
     public func getEmbeddedInstance(forKey key: String...) -> EmbeddedInstance? {
-        return EmbeddedInstance(BSONDocument(self.document[key] as? BSON.Document ?? [:]), inDatabase: self.model.collection.database)
+        return EmbeddedInstance(self.document[key] as? Document ?? [:], inDatabase: self.model.collection.database)
     }
     
     /// Ges the EmbeddedInstance from the given key position. Will return `nil` if none is found
     ///
-    /// The key parts are comma separated for accessing sublayers of the BSONDocument
+    /// The key parts are comma separated for accessing sublayers of the Document
     ///
     /// I.E.: `user.getEmbeddedInstance(forKey key: "subdocument", "group")`
     public func setEmbeddedInstance(toReferenceOf instance: Instance, withProjection projection: Projection, forKey key: String...) throws {
         let embedded = try EmbeddedInstance(reference: instance.makeReference(), withProjection: projection, inDatabase: self.model.collection.database)
         
-        self.document[key] = ~embedded
+        self.document[key] = embedded
     }
     
     /// Stores this Instance tot he collection
@@ -289,12 +289,12 @@ open class BasicInstance: Instance {
     /// Partial Instances will only update the projected values
     public func store() throws {
         if self.identifier.makeBsonValue() == BSON.Value.nothing || self.identifier.makeBsonValue() == BSON.Value.null {
-            self.identifier = ~ObjectId()
+            self.identifier = ObjectId()
         }
         
         switch state {
         case .whole:
-            try model.collection.update(matching: "_id" == self.identifier.makeBsonValue(), to: self.document.rawDocument, upserting: true, multiple: false)
+            try model.collection.update(matching: "_id" == self.identifier.makeBsonValue(), to: self.document, upserting: true, multiple: false)
         case .partial:
             try model.collection.update(matching: "_id" == self.identifier.makeBsonValue(), to: ["$set": self.document.makeBsonValue()], upserting: true, multiple: false)
         }
@@ -368,7 +368,7 @@ public final class Model {
 
 /// Registeres a model under a provided name. The plural name will be used for the collection name. Names should be unique and might cause errors when they're not.
 ///
-/// The provided schematics - or `Schama` - will be used to validate the collection BSONDocuments and any input that's used to instantiate an Instance of this Model
+/// The provided schematics - or `Schama` - will be used to validate the collection Documents and any input that's used to instantiate an Instance of this Model
 ///
 /// The provded database will be where the collection of this Model resides.
 ///
