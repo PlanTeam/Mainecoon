@@ -23,14 +23,14 @@ extension Instance {
     }
     
     /// Counts the amount of Instances matching the query
-    public static func count(matching query: Query) throws -> Int {
+    public static func count(matching query: Query? = nil) throws -> Int {
         return try makeCollection().count(matching: query)
     }
     
     /// Finds the first Instance matching the query
     ///
     /// Will return nil if none are found
-    public static func findOne(matching query: Query) throws -> Self? {
+    public static func findOne(matching query: Query? = nil) throws -> Self? {
         guard let document = try makeCollection().findOne(matching: query) else {
             return nil
         }
@@ -45,7 +45,7 @@ extension Instance {
     /// Or can be looped over using for loops
     ///
     /// `for instance in InstanceType.find(matching: ...)`
-    public static func find(matching query: Query) throws -> Cursor<Self> {
+    public static func find(matching query: Query? = nil) throws -> Cursor<Self> {
         return Cursor(base: try makeCollection().find(matching: query)) {
             try? Self.init($0, validatingDocument: true)
         }
@@ -54,7 +54,7 @@ extension Instance {
     /// Finds the firsts Partial Instance matching the query. The partial will only have all fields avaiable that are enabled in the Projection
     ///
     /// Will return nil if none are found
-    public static func findOne(matching query: Query, projecting projection: Projection) throws -> Self? {
+    public static func findOne(matching query: Query? = nil, projecting projection: Projection) throws -> Self? {
         guard let document = try makeCollection().findOne(matching: query, projecting: projection) else {
             return nil
         }
@@ -69,7 +69,7 @@ extension Instance {
     /// Or can be looped over using for loops
     ///
     /// `for instance in InstanceType.find(matching: ...)`
-    public static func find(matching query: Query, projecting projection: Projection) throws -> Cursor<Self> {
+    public static func find(matching query: Query? = nil, projecting projection: Projection) throws -> Cursor<Self> {
         return Cursor(base: try makeCollection().find(matching: query, projecting: projection)) {
             try? Self.init($0, projectedBy: projection, validatingDocument: true)
         }
