@@ -16,6 +16,9 @@ public enum MainecoonError: Error {
     
     /// Failed to initialize the Instance. Details in the error String
     case invalidInstanceDocument(error: String)
+    
+    /// Couldn't find an Instance with this identifier
+    case instanceNotFound(identifier: ValueConvertible)
 }
 
 /// A definition for a handler closure for instance storage errors
@@ -24,7 +27,7 @@ public typealias StorageErrorHandler = (Error, Instance, Bool)->()
 /// Anything conforming to this will be an instance
 public protocol InstanceProtocol {
     /// Stores the instance to it's collection
-    func store() throws
+    func store(fields: Document) throws
     
     /// Removes the instance from it's collection
     func remove() throws
@@ -40,17 +43,20 @@ public protocol Instance: InstanceProtocol, ValueConvertible {
     ///
     /// - parameter document: The BSONDocument to initialize this Instance with
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
-    init(_ document: BSONDocument, validatingDocument validate: Bool) throws
+    init(_ document: BSONDocument, validatingDocument validate: Bool, isNew new: Bool) throws
     
     /// Initializes a partial instance
     ///
     /// - parameter document: The BSONDocument to initialize this Instance with
     /// - parameter projection: The Projection to use when validating the BSONDocument. We can only validate the projected variables.
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
-    init(_ document: BSONDocument, projectedBy projection: Projection, validatingDocument validate: Bool) throws
+    init(_ document: BSONDocument, projectedBy projection: Projection, validatingDocument validate: Bool, isNew new: Bool) throws
     
     /// Initializes a whole instance by looking up the id in the collection
     init(fromIdentifier id: Value) throws
+    
+    /// Initializes a whole instance by looking up the id in the collection projecting provided keys
+    init(fromIdentifier id: Value, projectedBy projection: Projection) throws
 }
 
 /// Any Model registered as a BasicInstance or subclassed from the Basic Instnce will have all base functionality and bloat taken care of.
@@ -62,12 +68,17 @@ public protocol Instance: InstanceProtocol, ValueConvertible {
 /// Subclasses of BasicInstance can be enhanced by adding getter and setter variables to interact with the object more naturally. No additional implementation is necessary but may improve developer productivity and experience
 open class BasicInstance: Instance {
     /// Initializes a whole instance by looking up the id in the collection
-    public required init(fromIdentifier id: Value) throws {
+    public required init(fromIdentifier id: Value, projectedBy projection: Projection) throws {
         self.document = [:]
         self.state = .whole
+        self.isNew = false
         self.model = try makeModel()
         
-        let document = BSONDocument(try model.collection.findOne(matching: "_id" == id) ?? [:])
+        guard let doc = try model.collection.findOne(matching: "_id" == id, projecting: projection) else {
+            throw MainecoonError.instanceNotFound(identifier: id)
+        }
+        
+        let document = BSONDocument(doc)
         
         if case .invalid(let error) = self.model.schematics.validate(document) {
             throw MainecoonError.invalidInstanceDocument(error: error)
@@ -75,6 +86,30 @@ open class BasicInstance: Instance {
         
         self.document = document
     }
+
+    /// Initializes a whole instance by looking up the id in the collection
+    public required init(fromIdentifier id: Value) throws {
+        self.document = [:]
+        self.state = .whole
+        self.isNew = false
+        self.model = try makeModel()
+        
+        guard let doc = try model.collection.findOne(matching: "_id" == id) else {
+            throw MainecoonError.instanceNotFound(identifier: id)
+        }
+        
+        let document = BSONDocument(doc)
+        
+        if case .invalid(let error) = self.model.schematics.validate(document) {
+            throw MainecoonError.invalidInstanceDocument(error: error)
+        }
+        
+        self.document = document
+    }
+    
+    private var isNew: Bool
+    
+    private var mutatedFields = Document()
     
     /// Converts this Instance to a Value so that it can be embedded in a BSONDocument
     public func makeBsonValue() -> Value {
@@ -93,6 +128,7 @@ open class BasicInstance: Instance {
             return self.document["_id"]?.makeBsonValue() ?? BSON.Value.nothing
         }
         set {
+            self.mutatedFields["_id"] = true
             self.document["_id"] = newValue
         }
     }
@@ -101,9 +137,10 @@ open class BasicInstance: Instance {
     ///
     /// - parameter document: The BSONDocument to initialize this Instance with
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
-    public required init(_ document: BSONDocument, validatingDocument: Bool = true) throws {
+    public required init(_ document: BSONDocument, validatingDocument: Bool = true, isNew: Bool = true) throws {
         self.document = document
         self.state = .whole
+        self.isNew = isNew
         self.model = try makeModel()
         
         if validatingDocument, case .invalid(let error) = self.model.schematics.validate(document) {
@@ -116,9 +153,10 @@ open class BasicInstance: Instance {
     /// - parameter document: The BSONDocument to initialize this Instance with
     /// - parameter projection: The Projection to use when validating the BSONDocument. We can only validate the projected variables.
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
-    public required init(_ document: BSONDocument, projectedBy projection: Projection, validatingDocument: Bool = true) throws {
+    public required init(_ document: BSONDocument, projectedBy projection: Projection, validatingDocument: Bool = true, isNew: Bool = true) throws {
         self.document = document
         self.state = .partial
+        self.isNew = isNew
         self.model = try makeModel()
         
         if validatingDocument, case .invalid(let error) = self.model.schematics.validate(document, ignoringFields: projection) {
@@ -221,6 +259,7 @@ open class BasicInstance: Instance {
     ///
     /// I.E.: `instance.setProperty(toValue: true, forKey: "subdocument", "subsubdocument", "property")`
     public func setProperty(toValue newValue: ValueConvertible?, forKey key: String...) {
+        self.mutatedFields[key] = true
         document[key] = newValue?.makeBsonValue()
     }
     
@@ -249,7 +288,7 @@ open class BasicInstance: Instance {
                 return nil
             }
             
-            return try type.init(BSONDocument(document), validatingDocument: true)
+            return try type.init(BSONDocument(document), validatingDocument: true, isNew: false)
         }
         
         return try type.findOne(matching: "_id" == self.document[ref]?.makeBsonValue() ?? Value.nothing)
@@ -261,6 +300,7 @@ open class BasicInstance: Instance {
     ///
     /// I.E.: `user.setReference(toReferenceOf: userGroup, forKey: "subdocument", "group")`
     public func setReference(toReferenceOf newValue: BasicInstance, forKey key: String...) {
+        self.mutatedFields[key] = true
         document[key] = DBRef(referencing: newValue.identifier.makeBsonValue(), inCollection: newValue.model.collection).bsonValue
     }
     
@@ -281,24 +321,60 @@ open class BasicInstance: Instance {
     public func setEmbeddedInstance(toReferenceOf instance: Instance, withProjection projection: Projection, forKey key: String...) throws {
         let embedded = try EmbeddedInstance(reference: instance.makeReference(), withProjection: projection, inDatabase: self.model.collection.database)
         
+        let key = key
+        
+        mutatedFields[key] = true
+        
         self.document[key] = ~embedded
     }
     
-    /// Stores this Instance tot he collection
+    /// Stores this Instance to the collection
+    /// Updated only the mutated fields
     ///
     /// Partial Instances will only update the projected values
     public func store() throws {
+        try self.store(fields: self.mutatedFields)
+    }
+    
+    /// Stores this Instance to the collection
+    /// Updates only the provided field keys
+    ///
+    /// Partial Instances will only update the projected values
+    public func store(fields: Document) throws {
         if self.identifier.makeBsonValue() == BSON.Value.nothing || self.identifier.makeBsonValue() == BSON.Value.null {
             self.identifier = ~ObjectId()
         }
         
-        switch state {
-        case .whole:
-            try model.collection.update(matching: "_id" == self.identifier.makeBsonValue(), to: self.document.rawDocument, upserting: true, multiple: false)
-        case .partial:
-            try model.collection.update(matching: "_id" == self.identifier.makeBsonValue(), to: ["$set": self.document.makeBsonValue()], upserting: true, multiple: false)
+        if isNew {
+            try model.collection.insert(self.document.rawDocument)
+            isNew = false
+            return
         }
         
+        var setDocument = Document()
+        var unsetDocument = Document()
+        
+        for key in fields.flattened().keys {
+            let value = self.document.rawDocument[key]
+            
+            if value != .nothing {
+                setDocument[key] = value
+            } else {
+                unsetDocument[key] = ""
+            }
+        }
+        
+        var updateDocument = [:] as Document
+        
+        if setDocument.count > 0 {
+            updateDocument["$set"] = setDocument.makeBsonValue()
+        }
+        
+        if unsetDocument.count > 0 {
+            updateDocument["$unset"] = unsetDocument.makeBsonValue()
+        }
+        
+        try model.collection.update(matching: "_id" == self.identifier.makeBsonValue(), to: updateDocument)
     }
     
     /// Removes this Instance from the collection
@@ -383,7 +459,7 @@ public final class Model {
 public func registerModel<T: Instance>(named name: (singular: String, plural: String), withSchematics schematics: Schema, inDatabase db: Database, instanceType: T.Type) throws -> Model {
     let modelType = Model(named: name, inCollection: db[name.plural], withSchematics: schematics, instanceType: T.self as Instance.Type)
     
-    try modelType.collection.modify(flags: [
+    _ = try? modelType.collection.modify(flags: [
         "validator": schematics.makeBsonValue()
         ])
     

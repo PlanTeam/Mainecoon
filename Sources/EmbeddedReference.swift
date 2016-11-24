@@ -83,6 +83,6 @@ public struct EmbeddedInstance: ValueConvertible {
         }
         
         let type = try Model(named: collection.name).instanceType
-        return try? type.init(BSONDocument(document), validatingDocument: true)
+        return try? type.init(BSONDocument(document), validatingDocument: true, isNew: true)
     }
 }

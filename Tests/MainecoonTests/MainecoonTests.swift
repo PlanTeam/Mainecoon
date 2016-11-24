@@ -4,11 +4,14 @@ import XCTest
 class MainecoonTests: XCTestCase {
     func testEmbeddedDocuments() throws {
         let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
+        
+        try realGroup.store()
+        try db.server.fsync(async: false, blocking: true)
+        
         let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.makeReference().bsonValue, "age": 123]) as User
         
         try realUser.setEmbeddedInstance(toReferenceOf: realGroup, withProjection: ["name"], forKey: "embeddedgroup")
         
-        try realGroup.store()
         try realUser.store()
         
         guard let reference = realUser.getEmbeddedInstance(forKey: "embeddedgroup") else {
@@ -28,25 +31,26 @@ class MainecoonTests: XCTestCase {
     
     func testEntityProjections() throws {
         let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
+        
+        try realGroup.store()
+        try db.server.fsync(async: false, blocking: true)
+        
         let realUser = try User.make(fromDocument: ["username": "Bert", "group": realGroup.makeReference().bsonValue, "age": 123]) as User
         
         try realUser.store()
+        try db.server.fsync(async: false, blocking: true)
         
-        guard let user = try User.findOne(matching: "_id" == realUser.identifier, projecting: ["username"]) else {
-            XCTFail()
-            return
-        }
+        let user = try User(fromIdentifier: realUser.identifier.makeBsonValue(), projectedBy: ["username", "group"])
         
         XCTAssertNil(user.getProperty(forKey: "age") as String?)
         XCTAssertEqual(user.username, "Bert")
         
         user.setProperty(toValue: "Henk", forKey: "username")
-        try user.store()
         
-        guard let user2 = try User.findOne(matching: "_id" == realUser.identifier) else {
-            XCTFail()
-            return
-        }
+        try user.store()
+        try db.server.fsync(async: false, blocking: true)
+        
+        let user2 = try User(fromIdentifier: realUser.identifier.makeBsonValue())
         
         XCTAssertEqual(user2.username, "Henk")
         XCTAssertEqual(user2.getProperty(forKey: "age") as Int?, 123)
@@ -61,6 +65,9 @@ class MainecoonTests: XCTestCase {
         XCTAssertNil(try? Group.make(fromDocument: ["bob": true]) as Group)
         
         let realGroup = try Group.make(fromDocument: ["name": "bob"]) as Group
+        
+        try realGroup.store()
+        try db.server.fsync(async: false, blocking: true)
         
         XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "age": false, "group": ~ObjectId()]) as User)
         XCTAssertNil(try? User.make(fromDocument: ["username": "Bert", "age": false, "group": realGroup.identifier]) as User)
