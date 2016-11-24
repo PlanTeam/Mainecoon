@@ -48,7 +48,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
     
     public enum SchemaMetadata: ValueConvertible {
         public indirect enum FieldRequirement: ValueConvertible {
-            case string, number, date, anyObject, bool, nonEmptyString
+            case string, number, date, anyObject, bool, nonEmptyString, objectId
             case reference(model: Instance.Type)
             case object(matching: Schema)
             case enumeration([ValueConvertible])
@@ -70,6 +70,8 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                 case (.number, .int64(_)):
                     return .valid
                 case (.anyObject, .document(_)):
+                    return .valid
+                case (.objectId, .objectId):
                     return .valid
                 case (.bool, .boolean):
                     return .valid
@@ -182,7 +184,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                         ["$type": "string"],
                         ["$ne": ""]
                         ]]
-                case .reference(_):
+                case .reference(_), .objectId:
                     return ["$type": "objectId"]
                 case .enumeration(let values):
                     return ["$in": BSON.Document(array: values.map { $0.makeBsonValue() }).makeBsonValue()]
