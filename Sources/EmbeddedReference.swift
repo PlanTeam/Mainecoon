@@ -14,8 +14,8 @@ public struct EmbeddedInstance: ValueConvertible {
     }
     
     /// The identifier that's being referred to
-    public var referencedIdentifier: Value {
-        return self.reference.documentValue["$id"]?.makeBsonValue() ?? .nothing
+    public var referencedIdentifier: ValueConvertible {
+        return self.reference.documentValue["$id"] ?? Null()
     }
     
     /// The database that this reference resides in
@@ -35,7 +35,7 @@ public struct EmbeddedInstance: ValueConvertible {
                 return [:]
             }
             
-            return ref.makeBsonValue().document as? Document ?? [:]
+            return ref.makeBSONPrimitive() as? Document ?? [:]
             
         } catch {
             return [:]
@@ -66,12 +66,12 @@ public struct EmbeddedInstance: ValueConvertible {
     }
     
     /// Returns the Document Value representation of this EmbeddedInstance
-    public func makeBsonValue() -> Value {
+    public func makeBSONPrimitive() -> BSONPrimitive {
         return [
             "embedded": self.embeddedDocument,
             "reference": self.reference,
             "projection": self.projection
-        ]
+        ] as Document
     }
     
     /// Resolves this EmbeddedInstance to a full Instance that's not just a projection
@@ -83,6 +83,6 @@ public struct EmbeddedInstance: ValueConvertible {
         }
         
         let type = try Model(named: collection.name).instanceType
-        return try? type.init(document, validatingDocument: true)
+        return try? type.init(document, validatingDocument: true, isNew: false)
     }
 }

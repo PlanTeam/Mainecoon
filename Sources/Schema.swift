@@ -1,8 +1,11 @@
+import Foundation
 import BSON
 
 public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
-    public func makeBsonValue() -> Value {
-        return Document(array: fields.map { $0.makeBsonValue() }).makeBsonValue()
+    public func makeBSONPrimitive() -> BSONPrimitive {
+        return [
+            "$and": Document(array: fields).makeBSONPrimitive()
+        ] as Document
     }
     
     let fields: [SchemaMetadata]
@@ -31,7 +34,23 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                 continue fieldLoop
             }
             
-            let result = field.validate(against: document.makeBsonValue())
+            let result = field.validate(against: document)
+            
+            guard case .valid = result else {
+                return result
+            }
+        }
+        
+        return .valid
+    }
+    
+    public func validate(_ document: Document, validatingFields validatedFields: Projection, allowExtraKeys: Bool = true) -> ValidationResult {
+        fieldLoop: for field in fields {
+            guard validatedFields.document.keys.contains(field.name) else {
+                continue fieldLoop
+            }
+            
+            let result = field.validate(against: document)
             
             guard case .valid = result else {
                 return result
@@ -48,7 +67,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
     
     public enum SchemaMetadata: ValueConvertible {
         public indirect enum FieldRequirement: ValueConvertible {
-            case string, number, date, anyObject, bool, nonEmptyString
+            case string, number, date, anyObject, bool, nonEmptyString, objectId
             case reference(model: Instance.Type)
             case object(matching: Schema)
             case enumeration([ValueConvertible])
@@ -56,25 +75,31 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
             case any(requirement: [FieldRequirement])
             case exactly(ValueConvertible)
             case all(requirements: [FieldRequirement])
-            case matchingRegex(String, withOptions: String)
+            case matchingRegex(RegularExpression)
             case anything
             
             public func validate(against value: ValueConvertible?, forKey key: String, allowExtraKeys: Bool = true) -> ValidationResult {
-                switch (self, value?.makeBsonValue() ?? .nothing) {
-                case (.string, .string(_)):
+                guard let value = value else {
+                    return .invalid(reason: "Value is empty and therefore doesn't match")
+                }
+                
+                switch (self, value) {
+                case (.string, is String):
                     return .valid
-                case (.number, .double(_)):
+                case (.number, is Double):
                     return .valid
-                case (.number, .int32(_)):
+                case (.number, is Int32):
                     return .valid
-                case (.number, .int64(_)):
+                case (.number, is Int64):
                     return .valid
-                case (.anyObject, .document(_)):
+                case (.anyObject, is Document):
                     return .valid
-                case (.bool, .boolean):
+                case (.bool, is Bool):
                     return .valid
-                case (.nonEmptyString, .string(let s)):
-                    return s.characters.count > 0 ? .valid : .invalid(reason: "\(key) is of type String but is empty")
+                case (.objectId, is ObjectId):
+                    return .valid
+                case (.nonEmptyString, is String):
+                    return value.string.characters.count > 0 ? .valid : .invalid(reason: "\(key) is of type String but is empty")
                 case (.reference(let type), _):
                     do {
                         if let referenceDocument = value as? Document {
@@ -98,12 +123,12 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                                 return .invalid(reason: notFoundReason)
                             }
                         } else {
-                            return try type.count(matching: "_id" == value ?? BSON.Value.nothing) == 1 ? .valid : .invalid(reason: "\(key) is a reference to an Instance of \(type). But a matching model in this collection could not be found")
+                            return try type.count(matching: "_id" == value) == 1 ? .valid : .invalid(reason: "\(key) is a reference to an Instance of \(type). But a matching model in this collection could not be found")
                         }
                     } catch {
                         return .invalid(reason: "Database lookup error")
                     }
-                case (.object(let schema), .document(_)):
+                case (.object(let schema), is Document):
                     for match in schema.fields {
                         let result = match.validate(against: value, inScope: key)
                         
@@ -113,12 +138,18 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                     }
                     return .valid
                 case (.enumeration(let array), _):
-                    for arrayValue in array where value?.makeBsonValue() ?? .nothing == arrayValue.makeBsonValue() {
+                    for arrayValue in array where value.makeBSONPrimitive().makeBSONBinary() == arrayValue.makeBSONPrimitive().makeBSONBinary() && value.makeBSONPrimitive().typeIdentifier == arrayValue.makeBSONPrimitive().typeIdentifier {
                         return .valid
                     }
                     
                     return .invalid(reason: "\(key) does not match value in enumeration \(array)")
-                case (.array(let elementRequirement), .array(let document)):
+                case (.array(let elementRequirement), is Document):
+                    let array = value.document
+                    
+                    guard array.validatesAsArray() else {
+                        return .invalid(reason: "\(key) is not an array")
+                    }
+                    
                     for element in document.arrayValue {
                         let result = elementRequirement.validate(against: element, forKey: key)
                         
@@ -137,7 +168,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                     
                     return .invalid(reason: "\(key) does not match any provided requirement")
                 case (.exactly(let val), _):
-                    return value?.makeBsonValue() ?? .nothing == val.makeBsonValue() ? .valid : .invalid(reason: "\(key) does not match \(val)")
+                    return value.makeBSONPrimitive().makeBSONBinary() == val.makeBSONPrimitive().makeBSONBinary() && value.makeBSONPrimitive().typeIdentifier == val.makeBSONPrimitive().typeIdentifier ? .valid : .invalid(reason: "\(key) does not match \(val)")
                 case (.all(let requirements), _):
                     for requirement in requirements {
                         let requirement = requirement.validate(against: value, forKey: key)
@@ -149,9 +180,9 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                     
                     return .valid
                 case (.anything, _):
-                    return value != nil ? .valid : .invalid(reason: "\(key) doesn't exist")
-                case (.matchingRegex(_, _), .string(_)):
-                    fatalError("MKUnimplemented()")
+                    return .valid
+                case (.matchingRegex(let regex), is String):
+                    return value.string.range(of: regex.pattern, options: .regularExpression) != nil ? .valid : .invalid(reason: "\(key) does not match provided regularexpression")
                 default:
                     return .invalid(reason: "\(key) does not match expeced type \(self.stringValue)")
                 }
@@ -161,49 +192,49 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                 return "test"
             }
             
-            public func makeBsonValue() -> Value {
+            public func makeBSONPrimitive() -> BSONPrimitive {
                 switch self {
                 case .string:
-                    return ["$type": "string"]
+                    return ["$type": "string"] as Document
                 case .number:
                     return ["$or": [
                         ["$type": "double"] as Document,
                         ["$type": "int"] as Document,
                         ["$type": "long"] as Document
-                        ] as Document]
+                        ] as Document] as Document
                 case .date:
-                    return ["$type": "date"]
+                    return ["$type": "date"] as Document
                 case .anyObject:
-                    return ["$type": "object"]
+                    return ["$type": "object"] as Document
                 case .bool:
-                    return ["$type": "bool"]
+                    return ["$type": "bool"] as Document
                 case .nonEmptyString:
                     return ["$and": [
                         ["$type": "string"] as Document,
                         ["$ne": ""] as Document
-                        ] as Document]
-                case .reference(_):
-                    return ["$type": "objectId"]
+                        ] as Document] as Document
+                case .reference(_), .objectId:
+                    return ["$type": "objectId"] as Document
                 case .enumeration(let values):
-                    return ["$in": BSON.Document(array: values.map { $0.makeBsonValue() }).makeBsonValue()]
+                    return ["$in": Document(array: values)] as Document
                 case .array(let requirement):
-                    return ["$not": ["$elemMatch": ["$not": requirement.makeBsonValue()] as Document] as Document]
+                    return ["$not": ["$elemMatch": ["$not": requirement] as Document] as Document] as Document
                 case .any(let requirements):
                     return ["$or":
-                        BSON.Document(array: requirements.map{$0.makeBsonValue()}).makeBsonValue()
-                    ]
+                        BSON.Document(array: requirements)
+                    ] as Document
                 case .exactly(let val):
-                    return val.makeBsonValue()
+                    return val.makeBSONPrimitive()
                 case .all(let requirements):
                     return ["$and":
-                        BSON.Document(array: requirements.map{$0.makeBsonValue()}).makeBsonValue()
-                    ]
-                case .matchingRegex(let pattern, let options):
-                    return .regularExpression(pattern: pattern, options: options)
+                        Document(array: requirements)
+                    ] as Document
+                case .matchingRegex(let regex):
+                    return regex
                 case .anything:
-                    return .nothing
+                    return [:] as Document
                 case .object(let schema):
-                    return schema.makeBsonValue()
+                    return schema.makeBSONPrimitive()
                 }
             }
         }
@@ -233,18 +264,18 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
             }
         }
         
-        public func makeBsonValue() -> Value {
+        public func makeBSONPrimitive() -> BSONPrimitive {
             switch self {
             case .optional(let name, let requirement):
                 // TODO: FIX
                 return ["$or": [
-                            [name: requirement.makeBsonValue()] as Document,
+                            [name: requirement] as Document,
                         [name:
                             ["$exists": false] as Document
                         ] as Document
-                    ] as Document]
+                    ] as Document] as Document
             case .required(let name, let requirement):
-                return [name: requirement.makeBsonValue()]
+                return [name: requirement] as Document
             }
         }
     }
