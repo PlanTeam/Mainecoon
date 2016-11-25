@@ -50,7 +50,9 @@ extension Instance {
             try? Self.init($0, validatingDocument: true, isNew: false)
         }
     }
-    
+}
+
+extension ProjectableInstance {
     /// Finds the firsts Partial Instance matching the query. The partial will only have all fields avaiable that are enabled in the Projection
     ///
     /// Will return nil if none are found

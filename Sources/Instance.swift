@@ -14,6 +14,8 @@ public enum MainecoonError: Error {
     /// There is no Model found for this Instance.Type. This is usally because you didn't register a Model
     case invalidInstanceType
     
+    case instanceNotFound(withIdentifier: ValueConvertible)
+    
     /// Failed to initialize the Instance. Details in the error String
     case invalidInstanceDocument(error: String)
 }
@@ -42,18 +44,20 @@ public protocol Instance: InstanceProtocol, ValueConvertible {
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
     init(_ document: Document, validatingDocument validate: Bool, isNew: Bool) throws
     
+    /// Initializes a whole instance by looking up the id in the collection
+    init(fromIdentifier id: ValueConvertible) throws
+}
+
+public protocol ProjectableInstance: Instance {
+    /// Initializes a whole instance by looking up the id in the collection projecting provided keys
+    init(fromIdentifier id: ValueConvertible, projectedBy projection: Projection) throws
+    
     /// Initializes a partial instance
     ///
     /// - parameter document: The Document to initialize this Instance with
     /// - parameter projection: The Projection to use when validating the Document. We can only validate the projected variables.
     /// - parameter validate: When true, we'll validate the input before initializing this Instance
     init(_ document: Document, projectedBy projection: Projection, validatingDocument validate: Bool, isNew: Bool) throws
-    
-    /// Initializes a whole instance by looking up the id in the collection
-    init(fromIdentifier id: ValueConvertible) throws
-    
-    /// Initializes a whole instance by looking up the id in the collection projecting provided keys
-    init(fromIdentifier id: ValueConvertible, projectedBy projection: Projection) throws
 }
 
 /// Any Model registered as a BasicInstance or subclassed from the Basic Instnce will have all base functionality and bloat taken care of.
@@ -63,7 +67,7 @@ public protocol Instance: InstanceProtocol, ValueConvertible {
 /// Additionally we'll automatically store changes to the database when the Instance is not referred to anymore.
 ///
 /// Subclasses of BasicInstance can be enhanced by adding getter and setter variables to interact with the object more naturally. No additional implementation is necessary but may improve developer productivity and experience
-open class BasicInstance: Instance {
+open class BasicInstance: ProjectableInstance {
     /// Initializes a whole instance by looking up the id in the collection
     public required init(fromIdentifier id: ValueConvertible) throws {
         self.document = [:]

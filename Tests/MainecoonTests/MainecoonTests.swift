@@ -59,6 +59,7 @@ class MainecoonTests: XCTestCase {
     override func setUp() {
         _ = groupModel
         _ = userModel
+        _ = reflectedUserModel
     }
     
     func testEntityRelations() throws {
@@ -83,6 +84,30 @@ class MainecoonTests: XCTestCase {
         XCTAssertEqual(group.name, "bob")
     }
     
+    func testReflection() throws {
+        let user = try ReflectedUser.make(fromDocument: [
+                "username": "henk",
+                "password": "bob",
+                "age": 20,
+                "awesome": true
+            ]) as ReflectedUser
+        
+        XCTAssertEqual(user.username, "henk")
+        XCTAssertEqual(user.password, "bob")
+        XCTAssertEqual(user.age, 20)
+        XCTAssertEqual(user.awesome, true)
+        
+        try user.store()
+        try db.server.fsync(async: false, blocking: true)
+        
+        let user2 = try ReflectedUser(fromIdentifier: user.identifier)
+        
+        XCTAssertEqual(user2.username, "henk")
+        XCTAssertEqual(user2.password, "bob")
+        XCTAssertEqual(user2.age, 20)
+        XCTAssertEqual(user2.awesome, true)
+    }
+    
     static var allTests : [(String, (MainecoonTests) -> () throws -> Void)] {
         return [
             ("testEntityRelations", testEntityRelations),
@@ -102,6 +127,29 @@ let userModel = try! registerModel(named: ("user", "users"), withSchematics: [
     "age": (.number, false),
     "group": (.reference(model: Group.self), true)
     ], inDatabase: db, instanceType: User.self)
+
+let reflectedUserModel = try! registerModel(named: ("reflecteduser", "reflectedusers"), withSchematics: [
+    "username": (.nonEmptyString, true),
+    "password": (.nonEmptyString, true),
+    "age": (.number, true),
+    "awesome": (.bool, true)
+    ], inDatabase: db, instanceType: ReflectedUser.self)
+
+
+class ReflectedUser: ReflectedDocumentInstance {
+    /// The identifier of this Instance. Usually but not necessarily an ObjectId
+    public var identifier: ValueConvertible
+    var model: Model!
+    
+    var username: String = ""
+    var password: String = ""
+    var age: Int = -1
+    var awesome: Bool = false
+    
+    required init() {
+        self.identifier = ObjectId()
+    }
+}
 
 class Group: BasicInstance {
     var name: String {
