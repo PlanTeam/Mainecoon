@@ -240,6 +240,10 @@ open class BasicInstance: ProjectableInstance {
         return document[key]
     }
     
+    public func getRawProperty(forKey key: SubscriptExpressionType...) -> ValueConvertible? {
+        return document[raw: key]
+    }
+    
     public func getProperty<T: CustomValueConvertible>(forKey key: SubscriptExpressionType...) -> T? {
         return document.extract(key)
     }
