@@ -20,7 +20,7 @@ class MainecoonTests: XCTestCase {
             return
         }
         
-        XCTAssertEqual(reference.embeddedDocument["name"] as? String, "bob")
+        XCTAssertEqual(reference.embeddedDocument["name"] as String?, "bob")
         
         guard let groupReference = try reference.resolveReference() as? Group else {
             XCTFail()
@@ -175,7 +175,7 @@ class User: BasicInstance {
     var group: Group? {
         get {
             do {
-                return try self.getReference(forKey: "group") as? Group
+                return try self.getReference(forKey: "group") as Group?
             } catch {
                 return nil
             }

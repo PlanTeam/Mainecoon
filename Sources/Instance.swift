@@ -114,7 +114,7 @@ open class BasicInstance: ProjectableInstance {
     /// The identifier of this Instance. Usually but not necessarily an ObjectId
     public private(set) var identifier: ValueConvertible {
         get {
-            if let id = self.document["_id"] {
+            if let id = self.document[raw: "_id"] {
                 return id
             }
             
@@ -124,7 +124,7 @@ open class BasicInstance: ProjectableInstance {
         }
         set {
             self.mutatedFields["_id"] = true
-            self.document["_id"] = newValue
+            self.document[raw: "_id"] = newValue
         }
     }
     
@@ -164,7 +164,7 @@ open class BasicInstance: ProjectableInstance {
     
     private var isNew: Bool
     
-    private var mutatedFields = Document()
+    private var mutatedFields: Document = [:]
     
     /// The underlying Document type that we use for keeping track of references, Embedded Instances and normal boring variables
     public private(set) var document: Document
@@ -180,77 +180,73 @@ open class BasicInstance: ProjectableInstance {
         print("Error: \"\(error)\". In Instance \(instance)")
     }
     
-    /// Returns the Document for the given property or `nil` when it's not of this type
-    ///
-    /// Accessing subproperties can be done by comma separating the key parts
-    ///
-    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
-    public func getProperty(forKey key: String...) -> Document? {
-        return document[key] as? Document ?? [:]
+    public func getProperty(forKey key: SubscriptExpressionType...) -> String? {
+        return document[key]
     }
     
-    /// Returns the Foundation.Date for the given property or `nil` when it's not of this type
-    ///
-    /// Accessing subproperties can be done by comma separating the key parts
-    ///
-    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
-    public func getProperty(forKey key: String...) -> Date? {
-        return document[key] as? Date
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Int? {
+        return document[key]
     }
     
-    /// Returns the Foundation.Data for the given property or `nil` when it's not of this type
-    ///
-    /// Accessing subproperties can be done by comma separating the key parts
-    ///
-    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
-    public func getProperty(forKey key: String...) -> Data? {
-        return document[key] as? Data
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Int32? {
+        return document[key]
     }
     
-    /// Returns the ObjectId for the given property or `nil` when it's not of this type
-    ///
-    /// Accessing subproperties can be done by comma separating the key parts
-    ///
-    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
-    public func getProperty(forKey key: String...) -> ObjectId? {
-        return document[key] as? ObjectId
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Int64? {
+        return document[key]
     }
     
-    /// Returns the Bool for the given property or `nil` when it's not of this type
-    ///
-    /// Accessing subproperties can be done by comma separating the key parts
-    ///
-    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
-    public func getProperty(forKey key: String...) -> Bool? {
-        return document[key] as? Bool
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Bool? {
+        return document[key]
     }
     
-    /// Returns the Int for the given property or `nil` when it's not of this type
-    ///
-    /// Accessing subproperties can be done by comma separating the key parts
-    ///
-    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
-    public func getProperty(forKey key: String...) -> Int? {
-        return document[key]?.int
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Double? {
+        return document[key]
     }
     
-    /// Returns the String for the given property or `nil` when it's not of this type
-    ///
-    /// Accessing subproperties can be done by comma separating the key parts
-    ///
-    /// I.E.: `let subsubproperty = instance.getProperty(forKey: "subdocument", "subsubdocument", "property")`
-    public func getProperty(forKey key: String...) -> String? {
-        return document[key] as? String
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Date? {
+        return document[key]
     }
     
-    /// Sets the Value for the given property.
-    ///
-    /// Setting subproperties can be done by comma separating the key parts
-    ///
-    /// I.E.: `instance.setProperty(toValue: true, forKey: "subdocument", "subsubdocument", "property")`
-    public func setProperty(toValue newValue: ValueConvertible?, forKey key: String...) {
-        self.mutatedFields[key] = true
-        document[key] = newValue
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Document? {
+        return document[key]
+    }
+    
+    public func getProperty(forKey key: SubscriptExpressionType...) -> ObjectId? {
+        return document[key]
+    }
+    
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Timestamp? {
+        return document[key]
+    }
+    
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Binary? {
+        return document[key]
+    }
+    
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Data? {
+        return document[key]
+    }
+    
+    public func getProperty(forKey key: SubscriptExpressionType...) -> Null? {
+        return document[key]
+    }
+    
+    public func getProperty(forKey key: SubscriptExpressionType...) -> JavascriptCode? {
+        return document[key]
+    }
+    
+    public func getProperty(forKey key: SubscriptExpressionType...) -> RegularExpression? {
+        return document[key]
+    }
+    
+    public func getProperty<T: CustomValueConvertible>(forKey key: SubscriptExpressionType...) -> T? {
+        return document.extract(key)
+    }
+    
+    public func setProperty(toValue newValue: ValueConvertible?, forKey key: SubscriptExpressionType...) {
+        self.mutatedFields[raw: key] = true
+        document[raw: key] = newValue
     }
     
     /// Gets and resolves a reference for a key
@@ -260,30 +256,20 @@ open class BasicInstance: ProjectableInstance {
     /// It's recommended to cast this Instance to the related InstanceType.
     ///
     /// I.E.: `user.getReference(forKey: "subdocument", "group") as? Group`
-    public func getReference(forKey ref: String...) throws -> Instance? {
-        guard let typeRequirement = self.model.schematics.requirements.first(where: { name, requirement in
-            name == ref.joined(separator: ".")
-        }) else {
+    public func getReference<T: Instance>(forKey ref: SubscriptExpressionType...) throws -> T? {
+        guard let value = document[raw: ref] else {
             return nil
         }
         
-        guard case .reference(let type) = typeRequirement.requirement else {
-            return nil
-        }
-        
-        guard let value = document[ref] else {
-            return nil
-        }
-        
-        if let referenceDocument = value as? BSON.Document {
+        if let referenceDocument = value as? Document {
             guard let document = try DBRef(referenceDocument, inDatabase: self.model.collection.database)?.resolve() else {
                 return nil
             }
             
-            return try type.init(document, validatingDocument: true, isNew: false)
+            return try T.init(document, validatingDocument: true, isNew: false)
         }
         
-        return try type.findOne(matching: "_id" == value)
+        return try T.findOne(matching: "_id" == value)
     }
     
     /// Creates a reference to the provided instance at the position of the key
@@ -291,9 +277,9 @@ open class BasicInstance: ProjectableInstance {
     /// The key parts are comma separated for accessing sublayers of the Document
     ///
     /// I.E.: `user.setReference(toReferenceOf: userGroup, forKey: "subdocument", "group")`
-    public func setReference(toReferenceOf newValue: BasicInstance, forKey key: String...) {
-        self.mutatedFields[key] = true
-        document[key] = DBRef(referencing: newValue.identifier, inCollection: newValue.model.collection)
+    public func setReference(toReferenceOf newValue: BasicInstance, forKey key: SubscriptExpressionType...) {
+        self.mutatedFields[raw: key] = true
+        document[raw: key] = DBRef(referencing: newValue.identifier, inCollection: newValue.model.collection)
     }
     
     /// Ges the EmbeddedInstance from the given key position. Will return `nil` if none is found
@@ -301,8 +287,8 @@ open class BasicInstance: ProjectableInstance {
     /// The key parts are comma separated for accessing sublayers of the Document
     ///
     /// I.E.: `user.getEmbeddedInstance(forKey key: "subdocument", "group")`
-    public func getEmbeddedInstance(forKey key: String...) -> EmbeddedInstance? {
-        return EmbeddedInstance(self.document[key] as? Document ?? [:], inDatabase: self.model.collection.database)
+    public func getEmbeddedInstance(forKey key: SubscriptExpressionType...) -> EmbeddedInstance? {
+        return EmbeddedInstance(self.document[raw: key] as? Document ?? [:], inDatabase: self.model.collection.database)
     }
     
     /// Ges the EmbeddedInstance from the given key position. Will return `nil` if none is found
@@ -310,12 +296,12 @@ open class BasicInstance: ProjectableInstance {
     /// The key parts are comma separated for accessing sublayers of the Document
     ///
     /// I.E.: `user.getEmbeddedInstance(forKey key: "subdocument", "group")`
-    public func setEmbeddedInstance(toReferenceOf instance: Instance, withProjection projection: Projection, forKey key: String...) throws {
+    public func setEmbeddedInstance(toReferenceOf instance: Instance, withProjection projection: Projection, forKey key: SubscriptExpressionType...) throws {
         let embedded = try EmbeddedInstance(reference: instance.makeReference(), withProjection: projection, inDatabase: self.model.collection.database)
         
-        self.mutatedFields[key] = true
+        self.mutatedFields[raw: key] = true
         
-        self.document[key] = embedded
+        self.document[raw: key] = embedded
     }
     
     /// Stores this Instance tot he collection
@@ -342,8 +328,8 @@ open class BasicInstance: ProjectableInstance {
         var unsetDocument = Document()
         
         for key in fields.flattened().keys {
-            if let value = self.document[key] {
-                setDocument[key] = value
+            if let value = self.document[raw: key] {
+                setDocument[raw: key] = value
             } else {
                 unsetDocument[key] = ""
             }

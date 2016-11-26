@@ -30,7 +30,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
     
     public func validate(_ document: Document, ignoringFields ignoredFields: Projection? = nil, allowExtraKeys: Bool = true) -> ValidationResult {
         fieldLoop: for field in fields {
-            if let ignoredFields = ignoredFields, ignoredFields.document.keys.contains(field.name) {
+            if let ignoredFields = ignoredFields, ignoredFields.makeDocument().keys.contains(field.name) {
                 continue fieldLoop
             }
             
@@ -46,7 +46,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
     
     public func validate(_ document: Document, validatingFields validatedFields: Projection, allowExtraKeys: Bool = true) -> ValidationResult {
         fieldLoop: for field in fields {
-            guard validatedFields.document.keys.contains(field.name) else {
+            guard validatedFields.makeDocument().keys.contains(field.name) else {
                 continue fieldLoop
             }
             
@@ -99,7 +99,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                 case (.objectId, is ObjectId):
                     return .valid
                 case (.nonEmptyString, is String):
-                    return value.string.characters.count > 0 ? .valid : .invalid(reason: "\(key) is of type String but is empty")
+                    return (value.string?.characters.count) ?? 0 > 0 ? .valid : .invalid(reason: "\(key) is of type String but is empty")
                 case (.reference(let type), _):
                     do {
                         if let referenceDocument = value as? Document {
@@ -144,13 +144,13 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                     
                     return .invalid(reason: "\(key) does not match value in enumeration \(array)")
                 case (.array(let elementRequirement), is Document):
-                    let array = value.document
+                    let array = value.documentValue ?? []
                     
                     guard array.validatesAsArray() else {
                         return .invalid(reason: "\(key) is not an array")
                     }
                     
-                    for element in document.arrayValue {
+                    for element in array.arrayValue {
                         let result = elementRequirement.validate(against: element, forKey: key)
                         
                         guard case .valid = result else {
@@ -182,7 +182,7 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                 case (.anything, _):
                     return .valid
                 case (.matchingRegex(let regex), is String):
-                    return value.string.range(of: regex.pattern, options: .regularExpression) != nil ? .valid : .invalid(reason: "\(key) does not match provided regularexpression")
+                    return value.string?.range(of: regex.pattern, options: .regularExpression) != nil ? .valid : .invalid(reason: "\(key) does not match provided regularexpression")
                 default:
                     return .invalid(reason: "\(key) does not match expeced type \(self.stringValue)")
                 }
@@ -254,13 +254,13 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
             
             switch self {
             case .optional(let name, let requirement):
-                guard let value = value?.documentValue?[name] else {
+                guard let value = value?.documentValue?[raw: name] else {
                     return .valid
                 }
                 
                 return requirement.validate(against: value, forKey: scope + name)
             case .required(let name, let requirement):
-                return requirement.validate(against: value?.documentValue?[name], forKey: scope + name)
+                return requirement.validate(against: value?.documentValue?[raw: name], forKey: scope + name)
             }
         }
         

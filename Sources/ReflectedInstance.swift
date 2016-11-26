@@ -38,17 +38,27 @@ extension ReflectedDocumentInstance {
                 continue
             }
             
-            guard let value = document[property.key] else {
+            guard let value = document[raw: property.key] else {
                 throw ReflectionError.missingRequiredValue(key: property.key)
+            }
+            
+            guard property.value is ValueConvertible else {
+                continue
             }
             
             switch property.value {
             case is Int:
-                try set(value.int, key: property.key, for: self)
+                if let value = value.int {
+                    try set(value, key: property.key, for: self)
+                }
             case is Int32:
-                try set(value.int32, key: property.key, for: self)
+                if let value = value.int32 {
+                    try set(value, key: property.key, for: self)
+                }
             case is Int64:
-                try set(value.int64, key: property.key, for: self)
+                if let value = value.int64 {
+                    try set(value, key: property.key, for: self)
+                }
             default:
                 try set(value, key: property.key, for: self)
             }
@@ -75,17 +85,28 @@ extension ReflectedDocumentInstance {
                 continue
             }
             
-            guard let value = document[property.key] else {
+            guard let value = document[raw: property.key] else {
                 throw ReflectionError.missingRequiredValue(key: property.key)
+            }
+            
+            
+            guard property.value is ValueConvertible else {
+                continue
             }
             
             switch property.value {
             case is Int:
-                try set(value.int, key: property.key, for: self)
+                if let value = value.int {
+                    try set(value, key: property.key, for: self)
+                }
             case is Int32:
-                try set(value.int32, key: property.key, for: self)
+                if let value = value.int32 {
+                    try set(value, key: property.key, for: self)
+                }
             case is Int64:
-                try set(value.int64, key: property.key, for: self)
+                if let value = value.int64 {
+                    try set(value, key: property.key, for: self)
+                }
             default:
                 try set(value, key: property.key, for: self)
             }
@@ -111,7 +132,7 @@ extension ReflectedDocumentInstance {
         
         do {
             for property in try properties(self) {
-                document[property.key] = property.value as? ValueConvertible
+                document[raw: property.key] = property.value as? ValueConvertible
             }
         } catch {
             return [:] as Document

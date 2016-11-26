@@ -10,12 +10,12 @@ public struct EmbeddedInstance: ValueConvertible {
     
     /// The collection that this referred Instance resides in
     public var collection: MongoKitten.Collection {
-        return db[self.reference.documentValue["$ref"]?.string ?? ""]
+        return db[self.reference.documentValue["$ref"] as String? ?? ""]
     }
     
     /// The identifier that's being referred to
     public var referencedIdentifier: ValueConvertible {
-        return self.reference.documentValue["$id"] ?? Null()
+        return self.reference.documentValue[raw: "$id"] ?? Null()
     }
     
     /// The database that this reference resides in
@@ -44,7 +44,7 @@ public struct EmbeddedInstance: ValueConvertible {
     
     /// Initializes an EmbeddedInstance from a Document and the database this resides in
     public init?(_ document: Document, inDatabase db: Database) {
-        guard let embedded = document["embedded"] as? BSON.Document, let reference = document["reference"] as? BSON.Document, let projection = document["projection"] as? BSON.Document else {
+        guard let embedded = document["embedded"] as Document?, let reference = document["reference"] as Document?, let projection = document["projection"] as Document? else {
             return nil
         }
         
@@ -61,7 +61,7 @@ public struct EmbeddedInstance: ValueConvertible {
     /// Initializes an EmbeddedInstance from a reference, projection and the database this resides in
     public init(reference: DBRef, withProjection projection: Projection, inDatabase db: Database) throws {
         self.reference = reference
-        self.projection = projection.document
+        self.projection = projection.makeDocument()
         self.db = db
     }
     
