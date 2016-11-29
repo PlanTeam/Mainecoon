@@ -76,6 +76,28 @@ class MainecoonTests: XCTestCase {
         }
     }
     
+    func testExtraKeys() {
+        let schema: Schema = [
+            "name": (match: .string, required: true)
+        ]
+        
+        let doc0: Document = [
+            "name": "henk",
+            "age": 123
+        ]
+        let doc1 = BSONDocument(doc0)
+        
+        guard case .valid = schema.validate(doc1) else {
+            XCTFail()
+            return
+        }
+        
+        if case .valid = schema.validate(doc1, allowExtraKeys: false) {
+            XCTFail()
+            return
+        }
+    }
+    
     func testEntityRelations() throws {
         XCTAssertNil(try? Group.make(fromDocument: ["bob": true]) as Group)
         

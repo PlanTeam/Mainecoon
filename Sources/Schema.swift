@@ -27,12 +27,24 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
     }
     
     public func validate(_ document: BSONDocument, ignoringFields ignoredFields: Projection? = nil, allowExtraKeys: Bool = true) -> ValidationResult {
+        if !allowExtraKeys {
+            let fieldKeys = fields.map {
+                $0.name
+            }
+            
+            for key in document.keys {
+                if !fieldKeys.contains(key) {
+                    return .invalid(reason: "Extra key \"\(key)\" is not allowed.")
+                }
+            }
+        }
+        
         fieldLoop: for field in fields {
             if let ignoredFields = ignoredFields, ignoredFields.document.keys.contains(field.name) {
                 continue fieldLoop
             }
             
-            let result = field.validate(against: document.makeBsonValue())
+            let result = field.validate(against: document.makeBsonValue(), allowExtraKeys: allowExtraKeys)
             
             guard case .valid = result else {
                 return result
@@ -108,15 +120,9 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                     } catch {
                         return .invalid(reason: "Database lookup error")
                     }
-                case (.object(let schema), .document(_)):
-                    for match in schema.fields {
-                        let result = match.validate(against: value, inScope: key)
-                        
-                        guard case .valid = result else {
-                            return result
-                        }
-                    }
-                    return .valid
+                case (.object(let schema), .document(let doc)):
+                    // TODO: Fix
+                    return schema.validate(BSONDocument(doc), ignoringFields: nil, allowExtraKeys: allowExtraKeys)
                 case (.enumeration(let array), _):
                     for arrayValue in array where arrayValue.makeBsonValue() == value {
                         return .valid
@@ -232,9 +238,9 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                     return .valid
                 }
                 
-                return requirement.validate(against: value[name], forKey: scope + name)
+                return requirement.validate(against: value[name], forKey: scope + name, allowExtraKeys: allowExtraKeys)
             case .required(let name, let requirement):
-                return requirement.validate(against: value[name], forKey: scope + name)
+                return requirement.validate(against: value[name], forKey: scope + name, allowExtraKeys: allowExtraKeys)
             }
         }
         
