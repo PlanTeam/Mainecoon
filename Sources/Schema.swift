@@ -1,3 +1,4 @@
+import Foundation
 import BSON
 
 public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
@@ -154,8 +155,8 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                     return .valid
                 case (.anything, _):
                     return value != .nothing ? .valid : .invalid(reason: "\(key) doesn't exist")
-                case (.matchingRegex(_, _), .string(_)):
-                    fatalError("MKUnimplemented()")
+                case (.matchingRegex(let pattern, _), .string(let string)):
+                    return string.range(of: pattern, options: .regularExpression) != nil ? .valid : .invalid(reason: "\(key) does not match provided regularexpression")
                 default:
                     return .invalid(reason: "\(key) does not match expeced type \(self.stringValue)")
                 }
