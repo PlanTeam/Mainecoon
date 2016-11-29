@@ -73,6 +73,8 @@ public struct Schema: ValueConvertible, ExpressibleByDictionaryLiteral {
                     return .valid
                 case (.objectId, .objectId):
                     return .valid
+                case (.date, .dateTime(_)):
+                    return .valid
                 case (.bool, .boolean):
                     return .valid
                 case (.nonEmptyString, .string(let s)):

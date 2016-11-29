@@ -61,6 +61,21 @@ class MainecoonTests: XCTestCase {
         _ = userModel
     }
     
+    func testDateTypeValidation() throws {
+        let myDoc = try Document(extendedJSON: "{ \"expiry_date\": { \"$date\":\"2016-12-25T16:07:23+05:30\"}}");
+        print(myDoc["expiry_date"])
+        
+        let mySchema: Schema = [
+        "expiry_date": (match: .date, required: true)
+        ]
+        
+        let result = mySchema.validate(BSONDocument(myDoc))  //This gives expiry_date does not match expeced type test
+        guard case .valid = result else {
+            XCTFail()
+            return
+        }
+    }
+    
     func testEntityRelations() throws {
         XCTAssertNil(try? Group.make(fromDocument: ["bob": true]) as Group)
         
